@@ -3,13 +3,19 @@
 import { Fragment, useState, type FormEvent } from "react";
 
 import { QnaOverlay } from "@/components/qna/QnaOverlay";
-import { qnaPath, usePracticeSession, type PracticeScope } from "@/hooks/usePracticeSession";
+import {
+  qnaPath,
+  usePracticeSession,
+  type PracticeFocus,
+  type PracticeScope,
+} from "@/hooks/usePracticeSession";
 import { FeedbackCard } from "./FeedbackCard";
 
-export function WritingExercise({ scope }: { scope: PracticeScope }) {
+export function WritingExercise({ scope, focus = "due" }: { scope: PracticeScope; focus?: PracticeFocus }) {
   const { prompt, result, isLoading, isSubmitting, error, submitText, next } = usePracticeSession(
     scope,
     "writing",
+    focus,
   );
   const [answer, setAnswer] = useState("");
 
@@ -61,6 +67,7 @@ export function WritingExercise({ scope }: { scope: PracticeScope }) {
             correct={result.correct}
             feedbackEn={result.feedbackEn}
             correctAnswer={result.correctAnswerEs ?? ""}
+            spanishToSpeak={result.correctAnswerEs}
             onNext={handleNext}
           />
         )}

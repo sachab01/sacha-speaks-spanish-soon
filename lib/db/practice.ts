@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import { ConflictError, NotFoundError } from "../errors";
 import { ratingFromPronunciation, ratingFromTranslationCloseness, reviewSrsCard } from "../fsrs";
@@ -29,6 +29,27 @@ export async function getAllCoveredVocab() {
 }
 
 type DueItem = { vocabItemId: number; spanish: string; english: string };
+
+/**
+ * How to pick the next item within a practice queue:
+ * - "due": normal spaced-repetition order (earliest due date first).
+ * - "weakest": highest lapse rate first — words you get wrong most often.
+ * - "stale": longest since last reviewed first (never-reviewed counts as most stale).
+ */
+export const PRACTICE_FOCUSES = ["due", "weakest", "stale"] as const;
+export type PracticeFocus = (typeof PRACTICE_FOCUSES)[number];
+
+function focusOrderBy(focus: PracticeFocus): SQL[] {
+  switch (focus) {
+    case "weakest":
+      return [desc(sql`${srsState.lapses}::float / greatest(${srsState.reps}, 1)`), asc(srsState.dueAt)];
+    case "stale":
+      return [asc(sql`coalesce(${srsState.lastReviewAt}, to_timestamp(0))`), asc(srsState.dueAt)];
+    case "due":
+    default:
+      return [asc(srsState.dueAt)];
+  }
+}
 
 /**
  * Generates a fresh practice sentence around the given due item and records
@@ -96,7 +117,11 @@ async function buildAttemptForDueItem(params: {
  * attempt. Because SRS progress is shared globally per vocab item, an item
  * also used in another topic reflects progress from practicing it there too.
  */
-export async function getNextPracticeItem(topicId: number, exerciseType: ExerciseType) {
+export async function getNextPracticeItem(
+  topicId: number,
+  exerciseType: ExerciseType,
+  focus: PracticeFocus = "due",
+) {
   const [dueRow] = await db
     .select({
       vocabItemId: vocabItems.id,
@@ -107,7 +132,7 @@ export async function getNextPracticeItem(topicId: number, exerciseType: Exercis
     .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
     .innerJoin(topicVocab, eq(topicVocab.vocabItemId, vocabItems.id))
     .where(and(eq(topicVocab.topicId, topicId), eq(srsState.exerciseType, exerciseType)))
-    .orderBy(asc(srsState.dueAt))
+    .orderBy(...focusOrderBy(focus))
     .limit(1);
 
   if (!dueRow) {
@@ -122,7 +147,7 @@ export async function getNextPracticeItem(topicId: number, exerciseType: Exercis
  * Mixed Review's "next": the earliest-due item across ALL topics, with the
  * sentence generator free to combine vocabulary from every topic.
  */
-export async function getNextMixedPracticeItem(exerciseType: ExerciseType) {
+export async function getNextMixedPracticeItem(exerciseType: ExerciseType, focus: PracticeFocus = "due") {
   const [dueRow] = await db
     .select({
       vocabItemId: vocabItems.id,
@@ -132,7 +157,7 @@ export async function getNextMixedPracticeItem(exerciseType: ExerciseType) {
     .from(srsState)
     .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
     .where(eq(srsState.exerciseType, exerciseType))
-    .orderBy(asc(srsState.dueAt))
+    .orderBy(...focusOrderBy(focus))
     .limit(1);
 
   if (!dueRow) {

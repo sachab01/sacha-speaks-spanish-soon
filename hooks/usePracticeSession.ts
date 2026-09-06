@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 export type PracticeMode = "writing" | "speaking" | "listening";
+export type PracticeFocus = "due" | "weakest" | "stale";
 
 /** Scopes a practice session to one topic, or to Mixed Review across all topics. */
 export type PracticeScope = { topicId: number } | { mixed: true };
@@ -37,8 +38,9 @@ async function parseJsonResponse(response: Response) {
 }
 
 /** Shared attempt lifecycle (fetch prompt, submit, grade, advance) for all three practice modes. */
-export function usePracticeSession(scope: PracticeScope, mode: PracticeMode) {
+export function usePracticeSession(scope: PracticeScope, mode: PracticeMode, focus: PracticeFocus = "due") {
   const basePath = practiceBasePath(scope, mode);
+  const nextUrl = focus === "due" ? `${basePath}/next` : `${basePath}/next?focus=${focus}`;
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,14 +53,14 @@ export function usePracticeSession(scope: PracticeScope, mode: PracticeMode) {
     setResult(null);
     setPrompt(null);
     try {
-      const response = await fetch(`${basePath}/next`);
+      const response = await fetch(nextUrl);
       setPrompt(await parseJsonResponse(response));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsLoading(false);
     }
-  }, [basePath]);
+  }, [nextUrl]);
 
   useEffect(() => {
     // Deferred to a microtask so state updates inside fetchNext don't happen

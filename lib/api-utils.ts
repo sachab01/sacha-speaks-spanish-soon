@@ -41,3 +41,12 @@ export type PracticeMode = (typeof PRACTICE_MODES)[number];
 export function parsePracticeMode(mode: string): PracticeMode | null {
   return (PRACTICE_MODES as readonly string[]).includes(mode) ? (mode as PracticeMode) : null;
 }
+
+export const PRACTICE_FOCUSES = ["due", "weakest", "stale"] as const;
+export type PracticeFocus = (typeof PRACTICE_FOCUSES)[number];
+
+/** Reads `?focus=` from a request URL, defaulting to "due" for anything missing or invalid. */
+export function parsePracticeFocus(request: Request): PracticeFocus {
+  const value = new URL(request.url).searchParams.get("focus");
+  return value && (PRACTICE_FOCUSES as readonly string[]).includes(value) ? (value as PracticeFocus) : "due";
+}
