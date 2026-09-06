@@ -47,14 +47,14 @@ export function TopicCreateForm() {
           placeholder="e.g. ordering food at a restaurant"
           disabled={isSubmitting}
           maxLength={200}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          className="w-full rounded-full border border-accent-300 bg-[var(--background)] px-4 py-2 text-sm font-bold text-accent-600 outline-accent-500 focus:border-accent-500 dark:border-accent-800"
         />
-        {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-1 text-sm font-bold text-red-600">{error}</p>}
       </div>
       <button
         type="submit"
         disabled={isSubmitting || name.trim().length === 0}
-        className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+        className="rounded-full bg-accent-600 px-5 py-2 text-sm font-bold text-[var(--background)] transition-colors hover:bg-accent-700 disabled:opacity-50"
       >
         {isSubmitting ? "Building bank…" : "Create topic"}
       </button>
