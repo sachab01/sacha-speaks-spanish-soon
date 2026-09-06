@@ -29,9 +29,10 @@ export function SpeakingExercise({ scope, focus = "due" }: { scope: PracticeScop
     spokenForAttemptRef.current = prompt.attemptId;
 
     // Always speak the correct Spanish sentence, win or lose, so the learner
-    // hears a correct pronunciation model; feedback plays first, in English.
-    speak(result.feedbackEn, "en-US");
-    window.setTimeout(() => speak(result.correctAnswerEs ?? "", "es-MX"), 3500);
+    // hears a correct pronunciation model. Feedback text isn't auto-spoken —
+    // an unprompted voice reading out grading feedback right after recording
+    // felt jarring; it's still available via the "Replay feedback" button.
+    speak(result.correctAnswerEs ?? "", "es-MX");
   }, [result, prompt, speak]);
 
   async function handleToggleRecording() {
@@ -81,15 +82,15 @@ export function SpeakingExercise({ scope, focus = "due" }: { scope: PracticeScop
           <FeedbackCard
             correct={result.correct}
             feedbackEn={result.feedbackEn}
+            userAnswer={result.transcript ?? ""}
+            userAnswerLabel="We heard"
             correctAnswer={result.correctAnswerEs ?? ""}
+            words={result.words}
             onNext={handleNext}
             extra={
               <div className="flex flex-col gap-1 text-sm">
                 {typeof result.pronunciationScore === "number" && (
                   <p className="text-neutral-500">Pronunciation score: {result.pronunciationScore}/100</p>
-                )}
-                {result.transcript && (
-                  <p className="text-neutral-500">We heard: &ldquo;{result.transcript}&rdquo;</p>
                 )}
                 <div className="flex gap-3 pt-1">
                   <button

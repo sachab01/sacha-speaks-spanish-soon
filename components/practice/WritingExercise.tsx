@@ -66,7 +66,9 @@ export function WritingExercise({ scope, focus = "due" }: { scope: PracticeScope
           <FeedbackCard
             correct={result.correct}
             feedbackEn={result.feedbackEn}
+            userAnswer={answer}
             correctAnswer={result.correctAnswerEs ?? ""}
+            words={result.words}
             spanishToSpeak={result.correctAnswerEs}
             onNext={handleNext}
           />

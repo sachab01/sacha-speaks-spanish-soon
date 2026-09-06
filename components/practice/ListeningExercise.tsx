@@ -83,7 +83,9 @@ export function ListeningExercise({ scope, focus = "due" }: { scope: PracticeSco
           <FeedbackCard
             correct={result.correct}
             feedbackEn={result.feedbackEn}
+            userAnswer={answer}
             correctAnswer={result.correctAnswerEn ?? ""}
+            words={result.words}
             onNext={handleNext}
             extra={
               <p className="text-sm text-neutral-500">
