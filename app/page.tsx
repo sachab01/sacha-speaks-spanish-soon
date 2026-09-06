@@ -12,9 +12,14 @@ export default async function HomePage() {
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-4 py-12">
-      <div>
-        <h1 className="text-2xl font-semibold">Spaans</h1>
-        <p className="mt-1 text-sm text-neutral-500">Practice Spanish, one topic at a time.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Spaans</h1>
+          <p className="mt-1 text-sm text-neutral-500">Practice Spanish, one topic at a time.</p>
+        </div>
+        <Link href="/progress" className="text-sm text-neutral-500 hover:underline">
+          Your skill →
+        </Link>
       </div>
 
       <section>

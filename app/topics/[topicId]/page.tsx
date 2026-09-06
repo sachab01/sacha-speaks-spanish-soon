@@ -2,7 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { BankView } from "@/components/BankView";
+import { SkillSummary } from "@/components/progress/SkillSummary";
+import { SkillTable } from "@/components/progress/SkillTable";
+import { getTopicSkillOverview } from "@/lib/db/progress";
 import { getTopicWithBank } from "@/lib/db/topics";
+
+// Skill decays continuously with time since last review, so this must never be statically cached.
+export const dynamic = "force-dynamic";
 
 const PRACTICE_MODES = ["writing", "speaking", "listening"] as const;
 
@@ -15,6 +21,7 @@ export default async function TopicPage({ params }: { params: Promise<{ topicId:
   if (!result) notFound();
 
   const { topic, bankItems } = result;
+  const { summary, words } = await getTopicSkillOverview(id);
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-12">
@@ -36,6 +43,14 @@ export default async function TopicPage({ params }: { params: Promise<{ topicId:
           </Link>
         ))}
       </nav>
+
+      <section>
+        <h2 className="mb-3 text-sm font-medium tracking-wide text-neutral-500 uppercase">Your skill</h2>
+        <div className="flex flex-col gap-3">
+          <SkillSummary summary={summary} />
+          <SkillTable words={words} />
+        </div>
+      </section>
 
       <BankView bankItems={bankItems} />
     </main>
