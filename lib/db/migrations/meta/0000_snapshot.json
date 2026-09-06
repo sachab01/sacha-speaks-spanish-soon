@@ -1,5 +1,5 @@
 {
-  "id": "2e689991-7f4a-4063-bac5-5ee5a407f681",
+  "id": "c1017846-6b17-4803-87b5-3aca78c61206",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -446,6 +446,13 @@
         "scheduled_days": {
           "name": "scheduled_days",
           "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "learning_steps": {
+          "name": "learning_steps",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "default": 0
