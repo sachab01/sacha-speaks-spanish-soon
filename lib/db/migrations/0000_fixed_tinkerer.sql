@@ -56,6 +56,7 @@ CREATE TABLE "srs_state" (
 	"difficulty" real DEFAULT 0 NOT NULL,
 	"elapsed_days" real DEFAULT 0 NOT NULL,
 	"scheduled_days" real DEFAULT 0 NOT NULL,
+	"learning_steps" integer DEFAULT 0 NOT NULL,
 	"reps" integer DEFAULT 0 NOT NULL,
 	"lapses" integer DEFAULT 0 NOT NULL,
 	"state" "srs_card_state" DEFAULT 'new' NOT NULL,

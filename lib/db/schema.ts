@@ -59,6 +59,7 @@ export const srsState = pgTable(
     difficulty: real("difficulty").notNull().default(0),
     elapsedDays: real("elapsed_days").notNull().default(0),
     scheduledDays: real("scheduled_days").notNull().default(0),
+    learningSteps: integer("learning_steps").notNull().default(0),
     reps: integer("reps").notNull().default(0),
     lapses: integer("lapses").notNull().default(0),
     state: srsCardStateEnum("state").notNull().default("new"),
