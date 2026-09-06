@@ -4,13 +4,13 @@ import { Fragment, useEffect, useRef } from "react";
 
 import { QnaOverlay } from "@/components/qna/QnaOverlay";
 import { useMicRecorder } from "@/hooks/useMicRecorder";
-import { usePracticeSession } from "@/hooks/usePracticeSession";
+import { qnaPath, usePracticeSession, type PracticeScope } from "@/hooks/usePracticeSession";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { FeedbackCard } from "./FeedbackCard";
 
-export function SpeakingExercise({ topicId }: { topicId: number }) {
+export function SpeakingExercise({ scope }: { scope: PracticeScope }) {
   const { prompt, result, isLoading, isSubmitting, error, submitAudio, next } = usePracticeSession(
-    topicId,
+    scope,
     "speaking",
   );
   const { isRecording, error: micError, start, stop } = useMicRecorder();
@@ -48,7 +48,7 @@ export function SpeakingExercise({ topicId }: { topicId: number }) {
 
   return (
     <Fragment>
-      <QnaOverlay topicId={topicId} attemptId={prompt.attemptId} />
+      <QnaOverlay qnaUrl={qnaPath(scope, "speaking")} attemptId={prompt.attemptId} />
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs tracking-wide text-neutral-500 uppercase">Say this in Spanish</p>

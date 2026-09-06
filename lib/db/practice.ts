@@ -21,30 +21,25 @@ export async function getCoveredVocab(topicId: number) {
     .where(eq(bankItems.topicId, topicId));
 }
 
+/** Every topic's vocabulary combined — the whitelist for Mixed Review's cross-topic sentences. */
+async function getAllCoveredVocab() {
+  return db.select({ spanish: bankItems.spanish, english: bankItems.english }).from(bankItems);
+}
+
+type DueItem = { bankItemId: number; topicId: number; spanish: string; english: string };
+
 /**
- * Picks the earliest-due (bankItem, exerciseType) for this topic, generates a
- * fresh practice sentence around it, and records a pending attempt. Returns
- * the full attempt row; callers redact whichever side is the "answer" for
- * their exercise type before sending it to the client.
+ * Generates a fresh practice sentence around the given due item and records
+ * a pending attempt. Shared by the per-topic and Mixed Review "next" paths —
+ * they differ only in how the due item and covered-vocab whitelist are
+ * scoped, not in how the sentence/attempt gets built.
  */
-export async function getNextPracticeItem(topicId: number, exerciseType: ExerciseType) {
-  const [dueRow] = await db
-    .select({
-      bankItemId: bankItems.id,
-      spanish: bankItems.spanish,
-      english: bankItems.english,
-    })
-    .from(srsState)
-    .innerJoin(bankItems, eq(srsState.bankItemId, bankItems.id))
-    .where(and(eq(bankItems.topicId, topicId), eq(srsState.exerciseType, exerciseType)))
-    .orderBy(asc(srsState.dueAt))
-    .limit(1);
-
-  if (!dueRow) {
-    throw new NotFoundError("This topic has no bank items to practice yet.");
-  }
-
-  const coveredVocab = await getCoveredVocab(topicId);
+async function buildAttemptForDueItem(params: {
+  exerciseType: ExerciseType;
+  dueRow: DueItem;
+  coveredVocab: { spanish: string; english: string }[];
+}) {
+  const { exerciseType, dueRow, coveredVocab } = params;
   const focusItem = { spanish: dueRow.spanish, english: dueRow.english };
 
   const recentAttempts = await db
@@ -78,7 +73,7 @@ export async function getNextPracticeItem(topicId: number, exerciseType: Exercis
   const [attempt] = await db
     .insert(exerciseAttempts)
     .values({
-      topicId,
+      topicId: dueRow.topicId,
       exerciseType,
       bankItemId: dueRow.bankItemId,
       status: "pending",
@@ -89,6 +84,60 @@ export async function getNextPracticeItem(topicId: number, exerciseType: Exercis
     .returning();
 
   return attempt;
+}
+
+/**
+ * Picks the earliest-due (bankItem, exerciseType) for this topic, generates a
+ * fresh practice sentence around it, and records a pending attempt. Returns
+ * the full attempt row; callers redact whichever side is the "answer" for
+ * their exercise type before sending it to the client.
+ */
+export async function getNextPracticeItem(topicId: number, exerciseType: ExerciseType) {
+  const [dueRow] = await db
+    .select({
+      bankItemId: bankItems.id,
+      topicId: bankItems.topicId,
+      spanish: bankItems.spanish,
+      english: bankItems.english,
+    })
+    .from(srsState)
+    .innerJoin(bankItems, eq(srsState.bankItemId, bankItems.id))
+    .where(and(eq(bankItems.topicId, topicId), eq(srsState.exerciseType, exerciseType)))
+    .orderBy(asc(srsState.dueAt))
+    .limit(1);
+
+  if (!dueRow) {
+    throw new NotFoundError("This topic has no bank items to practice yet.");
+  }
+
+  const coveredVocab = await getCoveredVocab(topicId);
+  return buildAttemptForDueItem({ exerciseType, dueRow, coveredVocab });
+}
+
+/**
+ * Mixed Review's "next": the earliest-due item across ALL topics, with the
+ * sentence generator free to combine vocabulary from every topic.
+ */
+export async function getNextMixedPracticeItem(exerciseType: ExerciseType) {
+  const [dueRow] = await db
+    .select({
+      bankItemId: bankItems.id,
+      topicId: bankItems.topicId,
+      spanish: bankItems.spanish,
+      english: bankItems.english,
+    })
+    .from(srsState)
+    .innerJoin(bankItems, eq(srsState.bankItemId, bankItems.id))
+    .where(eq(srsState.exerciseType, exerciseType))
+    .orderBy(asc(srsState.dueAt))
+    .limit(1);
+
+  if (!dueRow) {
+    throw new NotFoundError("No topics have any bank items to practice yet.");
+  }
+
+  const coveredVocab = await getAllCoveredVocab();
+  return buildAttemptForDueItem({ exerciseType, dueRow, coveredVocab });
 }
 
 async function loadPendingAttempt(attemptId: string) {
