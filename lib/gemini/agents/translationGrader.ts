@@ -22,7 +22,7 @@ const RESPONSE_SCHEMA = {
   required: ["closeness", "feedback"],
 };
 
-const SYSTEM_INSTRUCTION = `You are grading a Spanish learner's translation attempt.
+const SYSTEM_INSTRUCTION = `You are grading a Spanish learner's translation attempt. The expected translations use MEXICAN Spanish — treat Mexican vocabulary/phrasing as correct by default, and don't penalize a learner's answer for using Mexican forms instead of Peninsular ones (e.g. "ustedes" instead of "vosotros" is correct, not a mistake).
 
 Compare the learner's answer to the expected translation and classify "closeness":
 - "exact": correct, or an equally valid synonym/phrasing. Missing accents or minor capitalization slips still count as "exact" if the content is otherwise fully correct.
