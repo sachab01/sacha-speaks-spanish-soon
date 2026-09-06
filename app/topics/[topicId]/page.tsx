@@ -4,13 +4,18 @@ import { notFound } from "next/navigation";
 import { BankView } from "@/components/BankView";
 import { SkillSummary } from "@/components/progress/SkillSummary";
 import { SkillTable } from "@/components/progress/SkillTable";
+import { MicIcon, PencilIcon, SpeakerIcon } from "@/components/ui/icons";
 import { getTopicSkillOverview } from "@/lib/db/progress";
 import { getTopicWithBank } from "@/lib/db/topics";
 
 // Skill decays continuously with time since last review, so this must never be statically cached.
 export const dynamic = "force-dynamic";
 
-const PRACTICE_MODES = ["writing", "speaking", "listening"] as const;
+const PRACTICE_MODES = [
+  { mode: "writing", icon: PencilIcon, bg: "bg-accent-600 hover:bg-accent-700", text: "text-[var(--background)]" },
+  { mode: "speaking", icon: MicIcon, bg: "bg-blue hover:bg-blue-dark", text: "text-[var(--background)]" },
+  { mode: "listening", icon: SpeakerIcon, bg: "bg-mustard hover:bg-mustard-dark", text: "text-ink" },
+] as const;
 
 export default async function TopicPage({ params }: { params: Promise<{ topicId: string }> }) {
   const { topicId } = await params;
@@ -24,29 +29,32 @@ export default async function TopicPage({ params }: { params: Promise<{ topicId:
   const { summary, words } = await getTopicSkillOverview(id);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-12">
+    <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-8 px-6 py-10 md:px-12">
       <div>
-        <Link href="/" className="text-sm text-neutral-500 hover:underline">
+        <Link href="/" className="text-sm font-bold text-accent-600 hover:text-accent-700 dark:text-accent-400">
           ← All topics
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold">{topic.name}</h1>
+        <h1 className="font-display mt-2 text-3xl font-bold text-accent-600 dark:text-accent-400">
+          {topic.name}
+        </h1>
       </div>
 
-      <nav className="flex gap-2">
-        {PRACTICE_MODES.map((mode) => (
+      <nav className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {PRACTICE_MODES.map(({ mode, icon: Icon, bg, text }) => (
           <Link
             key={mode}
             href={`/topics/${topic.id}/practice/${mode}`}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm capitalize hover:border-neutral-500 dark:border-neutral-700"
+            className={`flex flex-col items-center gap-2 rounded-lg py-7 text-sm font-bold capitalize transition-colors ${bg} ${text}`}
           >
+            <Icon className="h-5 w-5" />
             {mode}
           </Link>
         ))}
       </nav>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium tracking-wide text-neutral-500 uppercase">Your skill</h2>
-        <div className="flex flex-col gap-3">
+        <h2 className="mb-3 text-2xl font-black text-accent-600 dark:text-accent-400">Your skill</h2>
+        <div className="flex flex-col gap-4">
           <SkillSummary summary={summary} />
           <SkillTable words={words} />
         </div>
