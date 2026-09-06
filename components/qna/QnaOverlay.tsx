@@ -16,7 +16,7 @@ type QnaAnswer = {
  * Submitting doesn't touch the exercise's own state — it's purely a side
  * conversation scoped to the current attempt.
  */
-export function QnaOverlay({ topicId, attemptId }: { topicId: number; attemptId: string | null }) {
+export function QnaOverlay({ qnaUrl, attemptId }: { qnaUrl: string; attemptId: string | null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [questionText, setQuestionText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +30,7 @@ export function QnaOverlay({ topicId, attemptId }: { topicId: number; attemptId:
     setError(null);
     setAnswer(null);
     try {
-      const response = await fetch(`/api/topics/${topicId}/qna`, { method: "POST", body: formData });
+      const response = await fetch(qnaUrl, { method: "POST", body: formData });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Failed to get an answer");
       setAnswer(data);

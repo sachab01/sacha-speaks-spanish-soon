@@ -7,20 +7,27 @@ import { db } from "./client";
 import { EXERCISE_TYPES, getCoveredVocab, type ExerciseType } from "./practice";
 import { bankItems, exerciseAttempts, qnaLog, srsState, topics } from "./schema";
 
-export async function askQuestion(params: {
-  topicId: number;
-  attemptId: string;
-  question: { text: string } | { audioBytes: { data: Buffer; mimeType: string } };
-}) {
-  const { topicId, attemptId, question } = params;
+type Question = { text: string } | { audioBytes: { data: Buffer; mimeType: string } };
 
+async function loadAttemptAndTopic(attemptId: string, expectedTopicId?: number) {
   const [attempt] = await db.select().from(exerciseAttempts).where(eq(exerciseAttempts.id, attemptId));
-  if (!attempt || attempt.topicId !== topicId) {
+  if (!attempt || (expectedTopicId !== undefined && attempt.topicId !== expectedTopicId)) {
     throw new NotFoundError("Practice attempt not found.");
   }
 
-  const [topic] = await db.select().from(topics).where(eq(topics.id, topicId));
+  const [topic] = await db.select().from(topics).where(eq(topics.id, attempt.topicId));
   if (!topic) throw new NotFoundError("Topic not found.");
+
+  return { attempt, topic };
+}
+
+async function answerAndExtendBank(params: {
+  attempt: typeof exerciseAttempts.$inferSelect;
+  topic: typeof topics.$inferSelect;
+  question: Question;
+}) {
+  const { attempt, topic, question } = params;
+  const topicId = topic.id;
 
   const coveredVocab = await getCoveredVocab(topicId);
 
@@ -30,8 +37,7 @@ export async function askQuestion(params: {
     currentSpanish: attempt.generatedSpanish,
     currentEnglish: attempt.generatedEnglish,
     coveredVocab,
-    question:
-      "text" in question ? { text: question.text } : { audioBytes: question.audioBytes },
+    question: "text" in question ? { text: question.text } : { audioBytes: question.audioBytes },
   });
 
   const existingSpanishLower = new Set(coveredVocab.map((v) => v.spanish.toLowerCase()));
@@ -71,7 +77,7 @@ export async function askQuestion(params: {
 
   await db.insert(qnaLog).values({
     topicId,
-    attemptId,
+    attemptId: attempt.id,
     questionText: "text" in question ? question.text : null,
     questionAudioTranscript: "text" in question ? null : tutorResult.questionTranscript,
     answerText: tutorResult.answerText,
@@ -85,4 +91,16 @@ export async function askQuestion(params: {
     questionTranscript: tutorResult.questionTranscript,
     newVocabAdded,
   };
+}
+
+/** Per-topic Q&A: the attempt must belong to the given topic. */
+export async function askQuestion(params: { topicId: number; attemptId: string; question: Question }) {
+  const { attempt, topic } = await loadAttemptAndTopic(params.attemptId, params.topicId);
+  return answerAndExtendBank({ attempt, topic, question: params.question });
+}
+
+/** Mixed Review Q&A: no topic in the URL — the attempt's own topic is used. */
+export async function askQuestionMixed(params: { attemptId: string; question: Question }) {
+  const { attempt, topic } = await loadAttemptAndTopic(params.attemptId);
+  return answerAndExtendBank({ attempt, topic, question: params.question });
 }

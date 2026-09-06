@@ -4,6 +4,19 @@ import { useCallback, useEffect, useState } from "react";
 
 export type PracticeMode = "writing" | "speaking" | "listening";
 
+/** Scopes a practice session to one topic, or to Mixed Review across all topics. */
+export type PracticeScope = { topicId: number } | { mixed: true };
+
+export function practiceBasePath(scope: PracticeScope, mode: PracticeMode) {
+  return "topicId" in scope
+    ? `/api/topics/${scope.topicId}/practice/${mode}`
+    : `/api/practice/mixed/${mode}`;
+}
+
+export function qnaPath(scope: PracticeScope, mode: PracticeMode) {
+  return "topicId" in scope ? `/api/topics/${scope.topicId}/qna` : `/api/practice/mixed/${mode}/qna`;
+}
+
 type Prompt = { attemptId: string; promptEnglish?: string; promptSpanish?: string };
 
 export type AttemptResult = {
@@ -24,7 +37,8 @@ async function parseJsonResponse(response: Response) {
 }
 
 /** Shared attempt lifecycle (fetch prompt, submit, grade, advance) for all three practice modes. */
-export function usePracticeSession(topicId: number, mode: PracticeMode) {
+export function usePracticeSession(scope: PracticeScope, mode: PracticeMode) {
+  const basePath = practiceBasePath(scope, mode);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,14 +51,14 @@ export function usePracticeSession(topicId: number, mode: PracticeMode) {
     setResult(null);
     setPrompt(null);
     try {
-      const response = await fetch(`/api/topics/${topicId}/practice/${mode}/next`);
+      const response = await fetch(`${basePath}/next`);
       setPrompt(await parseJsonResponse(response));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsLoading(false);
     }
-  }, [topicId, mode]);
+  }, [basePath]);
 
   useEffect(() => {
     // Deferred to a microtask so state updates inside fetchNext don't happen
@@ -60,7 +74,7 @@ export function usePracticeSession(topicId: number, mode: PracticeMode) {
       setIsSubmitting(true);
       setError(null);
       try {
-        const response = await fetch(`/api/topics/${topicId}/practice/${mode}/attempt`, {
+        const response = await fetch(`${basePath}/attempt`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ attemptId: prompt.attemptId, userAnswerText }),
@@ -72,7 +86,7 @@ export function usePracticeSession(topicId: number, mode: PracticeMode) {
         setIsSubmitting(false);
       }
     },
-    [topicId, mode, prompt],
+    [basePath, prompt],
   );
 
   const submitAudio = useCallback(
@@ -84,10 +98,7 @@ export function usePracticeSession(topicId: number, mode: PracticeMode) {
         const formData = new FormData();
         formData.append("attemptId", prompt.attemptId);
         formData.append("audio", blob, "recording.webm");
-        const response = await fetch(`/api/topics/${topicId}/practice/${mode}/attempt`, {
-          method: "POST",
-          body: formData,
-        });
+        const response = await fetch(`${basePath}/attempt`, { method: "POST", body: formData });
         setResult(await parseJsonResponse(response));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
@@ -95,7 +106,7 @@ export function usePracticeSession(topicId: number, mode: PracticeMode) {
         setIsSubmitting(false);
       }
     },
-    [topicId, mode, prompt],
+    [basePath, prompt],
   );
 
   return { prompt, result, isLoading, isSubmitting, error, submitText, submitAudio, next: fetchNext };

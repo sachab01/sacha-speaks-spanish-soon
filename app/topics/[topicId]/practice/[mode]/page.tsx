@@ -32,9 +32,9 @@ export default async function PracticePage({
         <h1 className="mt-2 text-2xl font-semibold capitalize">{mode} practice</h1>
       </div>
 
-      {mode === "writing" && <WritingExercise topicId={topicId} />}
-      {mode === "speaking" && <SpeakingExercise topicId={topicId} />}
-      {mode === "listening" && <ListeningExercise topicId={topicId} />}
+      {mode === "writing" && <WritingExercise scope={{ topicId }} />}
+      {mode === "speaking" && <SpeakingExercise scope={{ topicId }} />}
+      {mode === "listening" && <ListeningExercise scope={{ topicId }} />}
     </main>
   );
 }

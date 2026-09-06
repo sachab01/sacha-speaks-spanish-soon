@@ -3,13 +3,13 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { QnaOverlay } from "@/components/qna/QnaOverlay";
-import { usePracticeSession } from "@/hooks/usePracticeSession";
+import { qnaPath, usePracticeSession, type PracticeScope } from "@/hooks/usePracticeSession";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { FeedbackCard } from "./FeedbackCard";
 
-export function ListeningExercise({ topicId }: { topicId: number }) {
+export function ListeningExercise({ scope }: { scope: PracticeScope }) {
   const { prompt, result, isLoading, isSubmitting, error, submitText, next } = usePracticeSession(
-    topicId,
+    scope,
     "listening",
   );
   const { speak } = useSpeechSynthesis();
@@ -40,7 +40,7 @@ export function ListeningExercise({ topicId }: { topicId: number }) {
 
   return (
     <Fragment>
-      <QnaOverlay topicId={topicId} attemptId={prompt.attemptId} />
+      <QnaOverlay qnaUrl={qnaPath(scope, "listening")} attemptId={prompt.attemptId} />
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs tracking-wide text-neutral-500 uppercase">Listen and translate to English</p>
