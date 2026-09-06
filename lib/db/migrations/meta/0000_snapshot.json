@@ -1,112 +1,9 @@
 {
-  "id": "c1017846-6b17-4803-87b5-3aca78c61206",
+  "id": "b681997b-4539-49f4-a61b-284591f84f43",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.bank_items": {
-      "name": "bank_items",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "topic_id": {
-          "name": "topic_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "item_type": {
-          "name": "item_type",
-          "type": "bank_item_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "spanish": {
-          "name": "spanish",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "english": {
-          "name": "english",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "part_of_speech": {
-          "name": "part_of_speech",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "bank_item_source",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "bank_items_topic_id_idx": {
-          "name": "bank_items_topic_id_idx",
-          "columns": [
-            {
-              "expression": "topic_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "bank_items_topic_id_topics_id_fk": {
-          "name": "bank_items_topic_id_topics_id_fk",
-          "tableFrom": "bank_items",
-          "tableTo": "topics",
-          "columnsFrom": [
-            "topic_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "bank_items_topic_spanish_unique": {
-          "name": "bank_items_topic_spanish_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "topic_id",
-            "spanish"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.exercise_attempts": {
       "name": "exercise_attempts",
       "schema": "",
@@ -122,7 +19,7 @@
           "name": "topic_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "exercise_type": {
           "name": "exercise_type",
@@ -131,8 +28,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "bank_item_id": {
-          "name": "bank_item_id",
+        "vocab_item_id": {
+          "name": "vocab_item_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -231,11 +128,11 @@
           "method": "btree",
           "with": {}
         },
-        "exercise_attempts_bank_item_id_idx": {
-          "name": "exercise_attempts_bank_item_id_idx",
+        "exercise_attempts_vocab_item_id_idx": {
+          "name": "exercise_attempts_vocab_item_id_idx",
           "columns": [
             {
-              "expression": "bank_item_id",
+              "expression": "vocab_item_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -261,12 +158,12 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "exercise_attempts_bank_item_id_bank_items_id_fk": {
-          "name": "exercise_attempts_bank_item_id_bank_items_id_fk",
+        "exercise_attempts_vocab_item_id_vocab_items_id_fk": {
+          "name": "exercise_attempts_vocab_item_id_vocab_items_id_fk",
           "tableFrom": "exercise_attempts",
-          "tableTo": "bank_items",
+          "tableTo": "vocab_items",
           "columnsFrom": [
-            "bank_item_id"
+            "vocab_item_id"
           ],
           "columnsTo": [
             "id"
@@ -295,7 +192,7 @@
           "name": "topic_id",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "attempt_id": {
           "name": "attempt_id",
@@ -402,8 +299,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "bank_item_id": {
-          "name": "bank_item_id",
+        "vocab_item_id": {
+          "name": "vocab_item_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
@@ -510,12 +407,12 @@
         }
       },
       "foreignKeys": {
-        "srs_state_bank_item_id_bank_items_id_fk": {
-          "name": "srs_state_bank_item_id_bank_items_id_fk",
+        "srs_state_vocab_item_id_vocab_items_id_fk": {
+          "name": "srs_state_vocab_item_id_vocab_items_id_fk",
           "tableFrom": "srs_state",
-          "tableTo": "bank_items",
+          "tableTo": "vocab_items",
           "columnsFrom": [
-            "bank_item_id"
+            "vocab_item_id"
           ],
           "columnsTo": [
             "id"
@@ -530,8 +427,98 @@
           "name": "srs_state_item_exercise_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "bank_item_id",
+            "vocab_item_id",
             "exercise_type"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.topic_vocab": {
+      "name": "topic_vocab",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "topic_id": {
+          "name": "topic_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vocab_item_id": {
+          "name": "vocab_item_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "topic_vocab_vocab_item_id_idx": {
+          "name": "topic_vocab_vocab_item_id_idx",
+          "columns": [
+            {
+              "expression": "vocab_item_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "topic_vocab_topic_id_topics_id_fk": {
+          "name": "topic_vocab_topic_id_topics_id_fk",
+          "tableFrom": "topic_vocab",
+          "tableTo": "topics",
+          "columnsFrom": [
+            "topic_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "topic_vocab_vocab_item_id_vocab_items_id_fk": {
+          "name": "topic_vocab_vocab_item_id_vocab_items_id_fk",
+          "tableFrom": "topic_vocab",
+          "tableTo": "vocab_items",
+          "columnsFrom": [
+            "vocab_item_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "topic_vocab_topic_item_unique": {
+          "name": "topic_vocab_topic_item_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "topic_id",
+            "vocab_item_id"
           ]
         }
       },
@@ -570,6 +557,72 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.vocab_items": {
+      "name": "vocab_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "item_type": {
+          "name": "item_type",
+          "type": "vocab_item_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "spanish": {
+          "name": "spanish",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "english": {
+          "name": "english",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "part_of_speech": {
+          "name": "part_of_speech",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "vocab_item_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "vocab_items_spanish_unique": {
+          "name": "vocab_items_spanish_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "spanish"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -579,22 +632,6 @@
       "values": [
         "pending",
         "graded"
-      ]
-    },
-    "public.bank_item_source": {
-      "name": "bank_item_source",
-      "schema": "public",
-      "values": [
-        "bank_builder",
-        "tutor_qna"
-      ]
-    },
-    "public.bank_item_type": {
-      "name": "bank_item_type",
-      "schema": "public",
-      "values": [
-        "word",
-        "sentence"
       ]
     },
     "public.exercise_type": {
@@ -624,6 +661,22 @@
         "learning",
         "review",
         "relearning"
+      ]
+    },
+    "public.vocab_item_source": {
+      "name": "vocab_item_source",
+      "schema": "public",
+      "values": [
+        "bank_builder",
+        "tutor_qna"
+      ]
+    },
+    "public.vocab_item_type": {
+      "name": "vocab_item_type",
+      "schema": "public",
+      "values": [
+        "word",
+        "sentence"
       ]
     }
   },
