@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { ListeningExercise } from "@/components/practice/ListeningExercise";
 import { SpeakingExercise } from "@/components/practice/SpeakingExercise";
 import { WritingExercise } from "@/components/practice/WritingExercise";
 import { parsePracticeMode } from "@/lib/api-utils";
@@ -33,7 +34,7 @@ export default async function PracticePage({
 
       {mode === "writing" && <WritingExercise topicId={topicId} />}
       {mode === "speaking" && <SpeakingExercise topicId={topicId} />}
-      {mode === "listening" && <p className="text-sm text-neutral-500">Listening practice is coming soon.</p>}
+      {mode === "listening" && <ListeningExercise topicId={topicId} />}
     </main>
   );
 }
