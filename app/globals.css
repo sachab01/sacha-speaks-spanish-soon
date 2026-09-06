@@ -1,26 +1,221 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f1e0;
+  --foreground: #ec5027;
+
+  --accent-50: #fef6f4;
+  --accent-100: #fce5df;
+  --accent-200: #f9cbbe;
+  --accent-300: #f6a893;
+  --accent-400: #f28568;
+  --accent-500: #ef6a47;
+  --accent-600: #ec5027;
+  --accent-700: #c94421;
+  --accent-800: #a5381b;
+  --accent-900: #822c15;
+  --accent-950: #1d1d1d;
+
+  --mustard: #f7cd45;
+  --mustard-dark: #c6a437;
+  --blue: #3078b5;
+  --blue-dark: #266091;
+  --ink: #1d1d1d;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: "Helvetica Neue", Arial, var(--font-geist-sans), sans-serif;
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-climate-crisis);
+
+  --color-accent: var(--accent-500);
+  --color-accent-50: var(--accent-50);
+  --color-accent-100: var(--accent-100);
+  --color-accent-200: var(--accent-200);
+  --color-accent-300: var(--accent-300);
+  --color-accent-400: var(--accent-400);
+  --color-accent-500: var(--accent-500);
+  --color-accent-600: var(--accent-600);
+  --color-accent-700: var(--accent-700);
+  --color-accent-800: var(--accent-800);
+  --color-accent-900: var(--accent-900);
+  --color-accent-950: var(--accent-950);
+
+  --color-mustard: var(--mustard);
+  --color-mustard-dark: var(--mustard-dark);
+  --color-blue: var(--blue);
+  --color-blue-dark: var(--blue-dark);
+  --color-ink: var(--ink);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1d1d1d;
+    --foreground: #f5f1e0;
+
+    --accent-50: #5e2010;
+    --accent-100: #822c15;
+    --accent-200: #a5381b;
+    --accent-300: #c94421;
+    --accent-400: #ec5027;
+    --accent-500: #ef6a47;
+    --accent-600: #f28568;
+    --accent-700: #f6a893;
+    --accent-800: #f9cbbe;
+    --accent-900: #fce5df;
+    --accent-950: #1d1d1d;
+
+    --mustard: #f7cd45;
+    --mustard-dark: #c6a437;
+    --blue: #5b9bd5;
+    --blue-dark: #3078b5;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--accent-200);
+  color: var(--accent-900);
+}
+
+/* Climate Crisis's "YEAR" variation axis controls letterform weight/bubbliness;
+   2050 (the heaviest) breaks glyph advance widths on multi-word headings and
+   overlaps letters, so multi-word text stays at a lower, safer value with
+   extra tracking as a margin of safety. */
+.font-display {
+  font-variation-settings: "YEAR" 2000;
+  letter-spacing: 0.01em;
+}
+
+/* Reserved for the single-word hero wordmark, where the full 2050 bubble effect is safe. */
+.font-display-hero {
+  font-variation-settings: "YEAR" 2050;
+}
+
+input:focus-visible {
+  outline-color: var(--accent-600);
+}
+
+/*
+ * Practice cards render the WritingExercise/SpeakingExercise/ListeningExercise/
+ * FeedbackCard components (out of scope to restyle directly) inside a solid
+ * accent-colored card. These recolor that content to match: their
+ * `text-neutral-*` captions read `--color-neutral-*` for their color, so
+ * overriding those custom properties re-themes them without touching the
+ * components; `<input>` fields go transparent with matching text/placeholder/
+ * border instead of keeping their own white box. (Written as plain CSS, not
+ * Tailwind arbitrary values — the JIT candidate parser doesn't handle the
+ * nested `.` / `var(...)` those would need.)
+ */
+.practice-card-cream,
+.practice-card-ink {
+  /* Bumps any of their text with no explicit font-weight class (plain <p>/<span>)
+     to bold via inheritance, matching the bold-everywhere look used elsewhere. */
+  font-weight: 700;
+}
+
+.practice-card-cream {
+  --color-neutral-300: var(--background);
+  --color-neutral-400: var(--background);
+  --color-neutral-500: var(--background);
+  --color-neutral-700: var(--background);
+}
+.practice-card-cream input {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--background) 40%, transparent);
+  color: var(--background);
+}
+.practice-card-cream input::placeholder {
+  color: color-mix(in srgb, var(--background) 60%, transparent);
+}
+
+.practice-card-ink {
+  --color-neutral-300: var(--ink);
+  --color-neutral-400: var(--ink);
+  --color-neutral-500: var(--ink);
+  --color-neutral-700: var(--ink);
+}
+.practice-card-ink input {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--ink) 40%, transparent);
+  color: var(--ink);
+}
+.practice-card-ink input::placeholder {
+  color: color-mix(in srgb, var(--ink) 60%, transparent);
+}
+
+/*
+ * FeedbackCard's "Correct"/"Not quite" status line and its per-word notes list
+ * use saturated green/amber/red/blue text with no background chip of their own
+ * (unlike the inline word-highlight chips, which keep their own light
+ * background and stay untouched) — those saturated hues read poorly directly
+ * against a solid accent card, so they fall back to the card's own text color;
+ * the wording ("Correct"/"Not quite", the word itself) still carries the
+ * meaning without relying on a hard-to-read tint.
+ */
+/* `span.font-medium`/`p.font-medium`, not the bare class — the Check/Next/mic
+   buttons also use font-medium, and must keep their own explicit white text
+   for contrast against their solid black button background. */
+.practice-card-cream span.font-medium,
+.practice-card-cream p.font-medium,
+.practice-card-cream .text-green-600,
+.practice-card-cream .text-amber-600,
+.practice-card-cream .text-red-600,
+.practice-card-cream .text-blue-600 {
+  color: var(--background);
+  font-weight: 700;
+}
+.practice-card-ink span.font-medium,
+.practice-card-ink p.font-medium,
+.practice-card-ink .text-green-600,
+.practice-card-ink .text-amber-600,
+.practice-card-ink .text-red-600,
+.practice-card-ink .text-blue-600 {
+  color: var(--ink);
+  font-weight: 700;
+}
+@media (prefers-color-scheme: dark) {
+  .practice-card-cream .dark\:text-green-400,
+  .practice-card-cream .dark\:text-amber-400,
+  .practice-card-cream .dark\:text-red-400,
+  .practice-card-cream .dark\:text-blue-400 {
+    color: var(--background);
+  }
+  .practice-card-ink .dark\:text-green-400,
+  .practice-card-ink .dark\:text-amber-400,
+  .practice-card-ink .dark\:text-red-400,
+  .practice-card-ink .dark\:text-blue-400 {
+    color: var(--ink);
+  }
+}
+
+/*
+ * QnaOverlay ("Ask a question") is a self-contained floating widget with its
+ * own accent-on-cream color scheme, but it's still a DOM descendant of
+ * whichever practice card mounts it (the exercise components render it as a
+ * sibling), so the overrides above would otherwise leak into it too — e.g. its
+ * <input> would go transparent-with-cream-text sitting on its own cream panel,
+ * making typed text invisible. These re-assert its intended styling: same
+ * specificity as the rules above, but declared later, so they win the tie.
+ */
+.qna-overlay input {
+  background: transparent;
+  color: var(--accent-600);
+  border-color: var(--accent-300);
+}
+.qna-overlay input::placeholder {
+  color: color-mix(in srgb, var(--accent-600) 60%, transparent);
+}
+.qna-overlay .text-green-600 {
+  color: var(--color-green-600);
+}
+.qna-overlay .text-red-600 {
+  color: var(--color-red-600);
 }
