@@ -9,10 +9,13 @@ if (!apiKey) {
 
 export const ai = new GoogleGenAI({ apiKey });
 
-// gemini-3.5-flash is the current free-tier-eligible model that supports both
-// text and inline audio input. Overridable via env in case a newer flash model
-// needs to be swapped in later.
-export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
+// gemini-3.5-flash-lite is the current free-tier-eligible model that supports
+// both text and inline audio input. The non-lite gemini-3.5-flash's free tier
+// is capped at only 20 requests/day (confirmed by hitting that limit during
+// development) — far too low for real use; the lite variant has a much higher
+// free daily quota while still handling our structured-JSON + audio calls
+// fine. Overridable via env if a better option needs to be swapped in later.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
 const TRANSIENT_STATUS_CODES = new Set([429, 503]);
 const MAX_ATTEMPTS = 3;
