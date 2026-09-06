@@ -8,6 +8,13 @@
       "when": 1788694785211,
       "tag": "0000_right_greymalkin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788709598927,
+      "tag": "0001_kind_vulcan",
+      "breakpoints": true
     }
   ]
 }

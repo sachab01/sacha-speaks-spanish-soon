@@ -14,7 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const vocabItemTypeEnum = pgEnum("vocab_item_type", ["word", "sentence"]);
-export const vocabItemSourceEnum = pgEnum("vocab_item_source", ["bank_builder", "tutor_qna"]);
+export const vocabItemSourceEnum = pgEnum("vocab_item_source", ["bank_builder", "tutor_qna", "core_vocab"]);
 export const exerciseTypeEnum = pgEnum("exercise_type", ["writing", "speaking", "listening"]);
 export const srsCardStateEnum = pgEnum("srs_card_state", ["new", "learning", "review", "relearning"]);
 export const fsrsRatingEnum = pgEnum("fsrs_rating", ["again", "hard", "good", "easy"]);
@@ -86,6 +86,8 @@ export const srsState = pgTable(
     lapses: integer("lapses").notNull().default(0),
     state: srsCardStateEnum("state").notNull().default("new"),
     lastReviewAt: timestamp("last_review_at", { withTimezone: true }),
+    /** A direct 0-100 mastery meter, separate from FSRS's own scheduling fields above — see lib/fsrs.ts. */
+    masteryScore: integer("mastery_score").notNull().default(50),
   },
   (table) => [
     unique("srs_state_item_exercise_unique").on(table.vocabItemId, table.exerciseType),
