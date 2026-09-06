@@ -3,6 +3,10 @@ import Link from "next/link";
 import { TopicCreateForm } from "@/components/TopicCreateForm";
 import { listTopics } from "@/lib/db/topics";
 
+// Otherwise Next statically prerenders this at build time and bakes in
+// whatever topics existed then, instead of the live list.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const topics = await listTopics();
 
