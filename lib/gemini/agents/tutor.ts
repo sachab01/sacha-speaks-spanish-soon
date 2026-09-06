@@ -14,6 +14,7 @@ const TutorResultSchema = z.object({
   answerText: z.string().min(1),
   onTopic: z.boolean(),
   newVocab: z.array(NewVocabItemSchema),
+  questionTranscript: z.string().nullable(),
 });
 
 export type TutorResult = z.infer<typeof TutorResultSchema>;
@@ -35,8 +36,9 @@ const RESPONSE_SCHEMA = {
         required: ["spanish", "english", "itemType"],
       },
     },
+    questionTranscript: { type: Type.STRING, nullable: true },
   },
-  required: ["answerText", "onTopic", "newVocab"],
+  required: ["answerText", "onTopic", "newVocab", "questionTranscript"],
 };
 
 const SYSTEM_INSTRUCTION = `You are a focused Spanish tutor helping a learner mid-exercise.
@@ -46,7 +48,8 @@ You are given the current topic, exercise, the sentence/prompt they're working o
 - Answer questions about the current material (grammar, vocabulary, meaning, "why is it phrased this way") helpfully and concisely.
 - Stay scoped to helping them learn Spanish for this exercise. If asked something unrelated (general chit-chat, unrelated topics, requests to change the exercise), politely decline and redirect them back to practicing — set "onTopic" to false and keep "answerText" brief in that case.
 - If your answer uses a Spanish word or phrase that is NOT already in their covered-vocabulary list, you MUST report it in "newVocab" (so it can be added to their bank) — unless it's an extremely basic function word a beginner already knows (articles, basic pronouns). If you used nothing new, return an empty "newVocab" array.
-- Keep "answerText" conversational and concise (2-4 sentences), in English, with Spanish terms quoted.`;
+- Keep "answerText" conversational and concise (2-4 sentences), in English, with Spanish terms quoted.
+- "questionTranscript": if the question came from an audio recording, put your transcription of what they said here; if it came as text, set this to null.`;
 
 export async function answerQuestion(params: {
   topicName: string;
@@ -80,7 +83,7 @@ Learner's question: "${question.text}"`,
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt: `${contextBlock}
 
-The learner's question is in the attached audio recording. Transcribe it mentally and answer it.`,
+The learner's question is in the attached audio recording. Transcribe it into "questionTranscript" and answer it.`,
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: TutorResultSchema,
     audio: question.audioBytes,

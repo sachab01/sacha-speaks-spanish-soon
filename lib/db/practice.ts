@@ -9,11 +9,12 @@ import { findUncoveredTokens } from "../gemini/vocab";
 import { db } from "./client";
 import { bankItems, exerciseAttempts, srsState } from "./schema";
 
-export type ExerciseType = "writing" | "speaking" | "listening";
+export const EXERCISE_TYPES = ["writing", "speaking", "listening"] as const;
+export type ExerciseType = (typeof EXERCISE_TYPES)[number];
 
 const RECENT_SENTENCE_LIMIT = 3;
 
-async function getCoveredVocab(topicId: number) {
+export async function getCoveredVocab(topicId: number) {
   return db
     .select({ spanish: bankItems.spanish, english: bankItems.english })
     .from(bankItems)

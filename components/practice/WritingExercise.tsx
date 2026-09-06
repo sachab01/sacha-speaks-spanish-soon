@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { Fragment, useState, type FormEvent } from "react";
 
+import { QnaOverlay } from "@/components/qna/QnaOverlay";
 import { usePracticeSession } from "@/hooks/usePracticeSession";
 import { FeedbackCard } from "./FeedbackCard";
 
@@ -27,40 +28,43 @@ export function WritingExercise({ topicId }: { topicId: number }) {
   if (!prompt) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="text-xs tracking-wide text-neutral-500 uppercase">Translate to Spanish</p>
-        <p className="mt-1 text-lg font-medium">{prompt.promptEnglish}</p>
-      </div>
+    <Fragment>
+      <QnaOverlay topicId={topicId} attemptId={prompt.attemptId} />
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="text-xs tracking-wide text-neutral-500 uppercase">Translate to Spanish</p>
+          <p className="mt-1 text-lg font-medium">{prompt.promptEnglish}</p>
+        </div>
 
-      {!result ? (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            disabled={isSubmitting}
-            autoFocus
-            placeholder="Escribe tu respuesta…"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        {!result ? (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <input
+              type="text"
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              disabled={isSubmitting}
+              autoFocus
+              placeholder="Escribe tu respuesta…"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            />
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="self-start rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              {isSubmitting ? "Checking…" : "Check"}
+            </button>
+          </form>
+        ) : (
+          <FeedbackCard
+            correct={result.correct}
+            feedbackEn={result.feedbackEn}
+            correctAnswer={result.correctAnswerEs ?? ""}
+            onNext={handleNext}
           />
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="self-start rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-          >
-            {isSubmitting ? "Checking…" : "Check"}
-          </button>
-        </form>
-      ) : (
-        <FeedbackCard
-          correct={result.correct}
-          feedbackEn={result.feedbackEn}
-          correctAnswer={result.correctAnswerEs ?? ""}
-          onNext={handleNext}
-        />
-      )}
-    </div>
+        )}
+      </div>
+    </Fragment>
   );
 }
