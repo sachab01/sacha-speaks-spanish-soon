@@ -1,8 +1,9 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../client";
+import { callStructured as callGemini } from "../client";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
+import { callStructured as callMistral } from "../../mistral/client";
 
 const NewVocabItemSchema = z.object({
   spanish: z.string().min(1),
@@ -70,7 +71,10 @@ Covered vocabulary whitelist:
 ${formatWhitelist(coveredVocab)}`;
 
   if (question.text !== undefined) {
-    return callStructured({
+    // Text questions have no audio to judge, so the cheaper/higher-limit
+    // Mistral free tier handles this path; only the audio branch below
+    // needs Gemini's real audio-understanding to transcribe the recording.
+    return callMistral({
       systemInstruction: SYSTEM_INSTRUCTION,
       prompt: `${contextBlock}
 
@@ -80,7 +84,7 @@ Learner's question: "${question.text}"`,
     });
   }
 
-  return callStructured({
+  return callGemini({
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt: `${contextBlock}
 

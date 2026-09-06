@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../client";
+import { callStructured } from "../../mistral/client";
 
 const BankBuilderResultSchema = z.object({
   words: z.array(
