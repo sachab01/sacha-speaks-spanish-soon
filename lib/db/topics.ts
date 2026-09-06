@@ -3,9 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { generateBank } from "../gemini/agents/bankBuilder";
 import { createInitialSrsCard } from "../fsrs";
 import { db } from "./client";
+import { EXERCISE_TYPES } from "./practice";
 import { bankItems, srsState, topics } from "./schema";
-
-const EXERCISE_TYPES = ["writing", "speaking", "listening"] as const;
 
 export type TopicSummary = {
   id: number;

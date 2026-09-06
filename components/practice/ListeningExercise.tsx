@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
+import { QnaOverlay } from "@/components/qna/QnaOverlay";
 import { usePracticeSession } from "@/hooks/usePracticeSession";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { FeedbackCard } from "./FeedbackCard";
@@ -38,52 +39,57 @@ export function ListeningExercise({ topicId }: { topicId: number }) {
   if (!prompt) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="text-xs tracking-wide text-neutral-500 uppercase">Listen and translate to English</p>
-        <button
-          type="button"
-          onClick={() => speak(prompt.promptSpanish ?? "", "es-ES")}
-          className="mt-2 flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm hover:border-neutral-500 dark:border-neutral-700"
-        >
-          🔊 Play sentence
-        </button>
-      </div>
-
-      {!result ? (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <input
-            type="text"
-            value={answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            disabled={isSubmitting}
-            autoFocus
-            placeholder="What did you hear? (in English)"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-          />
-          {error && <p className="text-sm text-red-600">{error}</p>}
+    <Fragment>
+      <QnaOverlay topicId={topicId} attemptId={prompt.attemptId} />
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="text-xs tracking-wide text-neutral-500 uppercase">Listen and translate to English</p>
           <button
-            type="submit"
-            disabled={isSubmitting}
-            className="self-start rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            type="button"
+            onClick={() => speak(prompt.promptSpanish ?? "", "es-ES")}
+            className="mt-2 flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm hover:border-neutral-500 dark:border-neutral-700"
           >
-            {isSubmitting ? "Checking…" : "Check"}
+            🔊 Play sentence
           </button>
-        </form>
-      ) : (
-        <FeedbackCard
-          correct={result.correct}
-          feedbackEn={result.feedbackEn}
-          correctAnswer={result.correctAnswerEn ?? ""}
-          onNext={handleNext}
-          extra={
-            <p className="text-sm text-neutral-500">
-              Spanish:{" "}
-              <span className="font-medium text-neutral-700 dark:text-neutral-300">{result.correctAnswerEs}</span>
-            </p>
-          }
-        />
-      )}
-    </div>
+        </div>
+
+        {!result ? (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <input
+              type="text"
+              value={answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              disabled={isSubmitting}
+              autoFocus
+              placeholder="What did you hear? (in English)"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            />
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="self-start rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+            >
+              {isSubmitting ? "Checking…" : "Check"}
+            </button>
+          </form>
+        ) : (
+          <FeedbackCard
+            correct={result.correct}
+            feedbackEn={result.feedbackEn}
+            correctAnswer={result.correctAnswerEn ?? ""}
+            onNext={handleNext}
+            extra={
+              <p className="text-sm text-neutral-500">
+                Spanish:{" "}
+                <span className="font-medium text-neutral-700 dark:text-neutral-300">
+                  {result.correctAnswerEs}
+                </span>
+              </p>
+            }
+          />
+        )}
+      </div>
+    </Fragment>
   );
 }
