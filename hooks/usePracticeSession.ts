@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type PracticeMode = "writing" | "speaking" | "listening";
 export type PracticeFocus = "due" | "weakest" | "stale";
@@ -20,9 +20,20 @@ export function qnaPath(scope: PracticeScope, mode: PracticeMode) {
 
 type Prompt = { attemptId: string; promptEnglish?: string; promptSpanish?: string };
 
+export type WordVerdict = {
+  /** Null when this span isn't one of the tracked vocab words (ordinary grammar/glue) — still graded, just not FSRS-scheduled. */
+  vocabWord: string | null;
+  /** The literal substring within the displayed sentence this verdict corresponds to — used for inline highlighting. */
+  sentenceText: string;
+  userSaid: string | null;
+  verdict: "correct" | "acceptable" | "wrong" | "missing";
+  note: string | null;
+};
+
 export type AttemptResult = {
   correct: boolean;
   feedbackEn: string;
+  words?: WordVerdict[];
   correctAnswerEs?: string;
   correctAnswerEn?: string;
   transcript?: string;
@@ -46,19 +57,26 @@ export function usePracticeSession(scope: PracticeScope, mode: PracticeMode, foc
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Guards against React Strict Mode's dev-only double effect invocation: /next
+  // isn't idempotent (each call generates a fresh sentence), so two overlapping
+  // calls can both resolve — only the latest one's result should ever be applied,
+  // or a stale response could silently replace the prompt after the newer one.
+  const requestIdRef = useRef(0);
 
   const fetchNext = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     setResult(null);
     setPrompt(null);
     try {
       const response = await fetch(nextUrl);
-      setPrompt(await parseJsonResponse(response));
+      const data = await parseJsonResponse(response);
+      if (requestIdRef.current === requestId) setPrompt(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (requestIdRef.current === requestId) setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setIsLoading(false);
+      if (requestIdRef.current === requestId) setIsLoading(false);
     }
   }, [nextUrl]);
 
