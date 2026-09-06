@@ -3,14 +3,20 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { QnaOverlay } from "@/components/qna/QnaOverlay";
-import { qnaPath, usePracticeSession, type PracticeScope } from "@/hooks/usePracticeSession";
+import {
+  qnaPath,
+  usePracticeSession,
+  type PracticeFocus,
+  type PracticeScope,
+} from "@/hooks/usePracticeSession";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { FeedbackCard } from "./FeedbackCard";
 
-export function ListeningExercise({ scope }: { scope: PracticeScope }) {
+export function ListeningExercise({ scope, focus = "due" }: { scope: PracticeScope; focus?: PracticeFocus }) {
   const { prompt, result, isLoading, isSubmitting, error, submitText, next } = usePracticeSession(
     scope,
     "listening",
+    focus,
   );
   const { speak } = useSpeechSynthesis();
   const [answer, setAnswer] = useState("");
@@ -20,7 +26,7 @@ export function ListeningExercise({ scope }: { scope: PracticeScope }) {
     if (!prompt || result) return;
     if (spokenForAttemptRef.current === prompt.attemptId) return;
     spokenForAttemptRef.current = prompt.attemptId;
-    speak(prompt.promptSpanish ?? "", "es-ES");
+    speak(prompt.promptSpanish ?? "", "es-MX");
   }, [prompt, result, speak]);
 
   function handleSubmit(event: FormEvent) {
@@ -46,7 +52,7 @@ export function ListeningExercise({ scope }: { scope: PracticeScope }) {
           <p className="text-xs tracking-wide text-neutral-500 uppercase">Listen and translate to English</p>
           <button
             type="button"
-            onClick={() => speak(prompt.promptSpanish ?? "", "es-ES")}
+            onClick={() => speak(prompt.promptSpanish ?? "", "es-MX")}
             className="mt-2 flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm hover:border-neutral-500 dark:border-neutral-700"
           >
             🔊 Play sentence

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { errorResponse, parsePracticeMode } from "@/lib/api-utils";
+import { errorResponse, parsePracticeFocus, parsePracticeMode } from "@/lib/api-utils";
 import { getNextPracticeItem } from "@/lib/db/practice";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ topicId: string; mode: string }> },
 ) {
   const { topicId: topicIdParam, mode: modeParam } = await params;
@@ -19,8 +19,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid practice mode" }, { status: 400 });
   }
 
+  const focus = parsePracticeFocus(request);
+
   try {
-    const attempt = await getNextPracticeItem(topicId, mode);
+    const attempt = await getNextPracticeItem(topicId, mode, focus);
 
     if (mode === "listening") {
       return NextResponse.json({ attemptId: attempt.id, promptSpanish: attempt.generatedSpanish });

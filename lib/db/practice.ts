@@ -1,51 +1,76 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import { ConflictError, NotFoundError } from "../errors";
 import { ratingFromPronunciation, ratingFromTranslationCloseness, reviewSrsCard } from "../fsrs";
 import { gradePronunciation } from "../gemini/agents/pronunciationCoach";
 import { generatePracticeSentence } from "../gemini/agents/sentenceGenerator";
-import { gradeTranslation, type TranslationDirection } from "../gemini/agents/translationGrader";
+import { gradeTranslation, type TranslationDirection, type TranslationGradeResult } from "../gemini/agents/translationGrader";
 import { findUncoveredTokens } from "../gemini/vocab";
 import { db } from "./client";
-import { bankItems, exerciseAttempts, srsState } from "./schema";
+import { exerciseAttempts, srsState, topicVocab, vocabItems } from "./schema";
 
 export const EXERCISE_TYPES = ["writing", "speaking", "listening"] as const;
 export type ExerciseType = (typeof EXERCISE_TYPES)[number];
 
 const RECENT_SENTENCE_LIMIT = 3;
 
+/** A topic's own vocabulary (via its topicVocab links). */
 export async function getCoveredVocab(topicId: number) {
   return db
-    .select({ spanish: bankItems.spanish, english: bankItems.english })
-    .from(bankItems)
-    .where(eq(bankItems.topicId, topicId));
+    .select({ spanish: vocabItems.spanish, english: vocabItems.english })
+    .from(topicVocab)
+    .innerJoin(vocabItems, eq(vocabItems.id, topicVocab.vocabItemId))
+    .where(eq(topicVocab.topicId, topicId));
 }
 
-/** Every topic's vocabulary combined — the whitelist for Mixed Review's cross-topic sentences. */
-async function getAllCoveredVocab() {
-  return db.select({ spanish: bankItems.spanish, english: bankItems.english }).from(bankItems);
+/** Every vocab item globally — the whitelist for Mixed Review's cross-topic sentences. */
+export async function getAllCoveredVocab() {
+  return db.select({ spanish: vocabItems.spanish, english: vocabItems.english }).from(vocabItems);
 }
 
-type DueItem = { bankItemId: number; topicId: number; spanish: string; english: string };
+type DueItem = { vocabItemId: number; spanish: string; english: string };
+
+/**
+ * How to pick the next item within a practice queue:
+ * - "due": normal spaced-repetition order (earliest due date first).
+ * - "weakest": highest lapse rate first — words you get wrong most often.
+ * - "stale": longest since last reviewed first (never-reviewed counts as most stale).
+ */
+export const PRACTICE_FOCUSES = ["due", "weakest", "stale"] as const;
+export type PracticeFocus = (typeof PRACTICE_FOCUSES)[number];
+
+function focusOrderBy(focus: PracticeFocus): SQL[] {
+  switch (focus) {
+    case "weakest":
+      return [desc(sql`${srsState.lapses}::float / greatest(${srsState.reps}, 1)`), asc(srsState.dueAt)];
+    case "stale":
+      return [asc(sql`coalesce(${srsState.lastReviewAt}, to_timestamp(0))`), asc(srsState.dueAt)];
+    case "due":
+    default:
+      return [asc(srsState.dueAt)];
+  }
+}
 
 /**
  * Generates a fresh practice sentence around the given due item and records
  * a pending attempt. Shared by the per-topic and Mixed Review "next" paths —
  * they differ only in how the due item and covered-vocab whitelist are
- * scoped, not in how the sentence/attempt gets built.
+ * scoped, not in how the sentence/attempt gets built. `topicId` is null for
+ * Mixed Review attempts, which aren't scoped to one topic.
  */
 async function buildAttemptForDueItem(params: {
   exerciseType: ExerciseType;
+  topicId: number | null;
   dueRow: DueItem;
   coveredVocab: { spanish: string; english: string }[];
 }) {
-  const { exerciseType, dueRow, coveredVocab } = params;
+  const { exerciseType, topicId, dueRow, coveredVocab } = params;
   const focusItem = { spanish: dueRow.spanish, english: dueRow.english };
 
   const recentAttempts = await db
     .select({ generatedSpanish: exerciseAttempts.generatedSpanish })
     .from(exerciseAttempts)
-    .where(and(eq(exerciseAttempts.bankItemId, dueRow.bankItemId), eq(exerciseAttempts.status, "graded")))
+    .where(and(eq(exerciseAttempts.vocabItemId, dueRow.vocabItemId), eq(exerciseAttempts.status, "graded")))
     .orderBy(desc(exerciseAttempts.createdAt))
     .limit(RECENT_SENTENCE_LIMIT);
 
@@ -73,9 +98,9 @@ async function buildAttemptForDueItem(params: {
   const [attempt] = await db
     .insert(exerciseAttempts)
     .values({
-      topicId: dueRow.topicId,
+      topicId,
       exerciseType,
-      bankItemId: dueRow.bankItemId,
+      vocabItemId: dueRow.vocabItemId,
       status: "pending",
       generatedSpanish: sentence.spanish,
       generatedEnglish: sentence.english,
@@ -87,23 +112,27 @@ async function buildAttemptForDueItem(params: {
 }
 
 /**
- * Picks the earliest-due (bankItem, exerciseType) for this topic, generates a
- * fresh practice sentence around it, and records a pending attempt. Returns
- * the full attempt row; callers redact whichever side is the "answer" for
- * their exercise type before sending it to the client.
+ * Picks the earliest-due (vocabItem, exerciseType) linked to this topic,
+ * generates a fresh practice sentence around it, and records a pending
+ * attempt. Because SRS progress is shared globally per vocab item, an item
+ * also used in another topic reflects progress from practicing it there too.
  */
-export async function getNextPracticeItem(topicId: number, exerciseType: ExerciseType) {
+export async function getNextPracticeItem(
+  topicId: number,
+  exerciseType: ExerciseType,
+  focus: PracticeFocus = "due",
+) {
   const [dueRow] = await db
     .select({
-      bankItemId: bankItems.id,
-      topicId: bankItems.topicId,
-      spanish: bankItems.spanish,
-      english: bankItems.english,
+      vocabItemId: vocabItems.id,
+      spanish: vocabItems.spanish,
+      english: vocabItems.english,
     })
     .from(srsState)
-    .innerJoin(bankItems, eq(srsState.bankItemId, bankItems.id))
-    .where(and(eq(bankItems.topicId, topicId), eq(srsState.exerciseType, exerciseType)))
-    .orderBy(asc(srsState.dueAt))
+    .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
+    .innerJoin(topicVocab, eq(topicVocab.vocabItemId, vocabItems.id))
+    .where(and(eq(topicVocab.topicId, topicId), eq(srsState.exerciseType, exerciseType)))
+    .orderBy(...focusOrderBy(focus))
     .limit(1);
 
   if (!dueRow) {
@@ -111,25 +140,24 @@ export async function getNextPracticeItem(topicId: number, exerciseType: Exercis
   }
 
   const coveredVocab = await getCoveredVocab(topicId);
-  return buildAttemptForDueItem({ exerciseType, dueRow, coveredVocab });
+  return buildAttemptForDueItem({ exerciseType, topicId, dueRow, coveredVocab });
 }
 
 /**
  * Mixed Review's "next": the earliest-due item across ALL topics, with the
  * sentence generator free to combine vocabulary from every topic.
  */
-export async function getNextMixedPracticeItem(exerciseType: ExerciseType) {
+export async function getNextMixedPracticeItem(exerciseType: ExerciseType, focus: PracticeFocus = "due") {
   const [dueRow] = await db
     .select({
-      bankItemId: bankItems.id,
-      topicId: bankItems.topicId,
-      spanish: bankItems.spanish,
-      english: bankItems.english,
+      vocabItemId: vocabItems.id,
+      spanish: vocabItems.spanish,
+      english: vocabItems.english,
     })
     .from(srsState)
-    .innerJoin(bankItems, eq(srsState.bankItemId, bankItems.id))
+    .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
     .where(eq(srsState.exerciseType, exerciseType))
-    .orderBy(asc(srsState.dueAt))
+    .orderBy(...focusOrderBy(focus))
     .limit(1);
 
   if (!dueRow) {
@@ -137,7 +165,7 @@ export async function getNextMixedPracticeItem(exerciseType: ExerciseType) {
   }
 
   const coveredVocab = await getAllCoveredVocab();
-  return buildAttemptForDueItem({ exerciseType, dueRow, coveredVocab });
+  return buildAttemptForDueItem({ exerciseType, topicId: null, dueRow, coveredVocab });
 }
 
 async function loadPendingAttempt(attemptId: string) {
@@ -147,15 +175,26 @@ async function loadPendingAttempt(attemptId: string) {
   return attempt;
 }
 
-async function applyReview(bankItemId: number, exerciseType: ExerciseType, rating: Parameters<typeof reviewSrsCard>[1]) {
+async function applyReview(vocabItemId: number, exerciseType: ExerciseType, rating: Parameters<typeof reviewSrsCard>[1]) {
   const [srsRow] = await db
     .select()
     .from(srsState)
-    .where(and(eq(srsState.bankItemId, bankItemId), eq(srsState.exerciseType, exerciseType)));
+    .where(and(eq(srsState.vocabItemId, vocabItemId), eq(srsState.exerciseType, exerciseType)));
 
   const { card, isCorrect } = reviewSrsCard(srsRow, rating);
   await db.update(srsState).set(card).where(eq(srsState.id, srsRow.id));
   return isCorrect;
+}
+
+/** Strips accents, case, and punctuation so a verbatim (if imperfect) match can skip the Gemini call. */
+function normalizeForExactMatch(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[¿?¡!.,;:"'()«»]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Grades a writing (en_to_es) or listening (es_to_en) attempt. */
@@ -168,9 +207,17 @@ export async function submitTranslationAttempt(params: {
   const attempt = await loadPendingAttempt(attemptId);
 
   const expected = direction === "en_to_es" ? attempt.generatedSpanish : attempt.generatedEnglish;
-  const grade = await gradeTranslation({ expected, userAnswer: userAnswerText, direction });
+
+  // A verbatim match (modulo accents/case/punctuation) is unambiguously correct —
+  // skip the Gemini call entirely. Anything else needs Gemini's judgment, since a
+  // real translation can be a valid synonym/rephrasing that never matches exactly.
+  const grade: TranslationGradeResult =
+    normalizeForExactMatch(userAnswerText) === normalizeForExactMatch(expected)
+      ? { closeness: "exact", feedback: "Correct!" }
+      : await gradeTranslation({ expected, userAnswer: userAnswerText, direction });
+
   const rating = ratingFromTranslationCloseness(grade.closeness);
-  const isCorrect = await applyReview(attempt.bankItemId, attempt.exerciseType as ExerciseType, rating);
+  const isCorrect = await applyReview(attempt.vocabItemId, attempt.exerciseType as ExerciseType, rating);
 
   await db
     .update(exerciseAttempts)
@@ -199,7 +246,7 @@ export async function submitSpeakingAttempt(params: { attemptId: string; audioBy
 
   const result = await gradePronunciation({ expectedEs: attempt.generatedSpanish, audioBytes, mimeType });
   const rating = ratingFromPronunciation(result);
-  const isCorrect = await applyReview(attempt.bankItemId, attempt.exerciseType as ExerciseType, rating);
+  const isCorrect = await applyReview(attempt.vocabItemId, attempt.exerciseType as ExerciseType, rating);
 
   await db
     .update(exerciseAttempts)

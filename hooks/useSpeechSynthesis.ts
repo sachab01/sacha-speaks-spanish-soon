@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-export type SpeechLang = "en-US" | "es-ES";
+export type SpeechLang = "en-US" | "es-MX";
 
 /** Wraps window.speechSynthesis, picking a matching voice for the requested language. */
 export function useSpeechSynthesis() {

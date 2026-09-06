@@ -13,8 +13,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const bankItemTypeEnum = pgEnum("bank_item_type", ["word", "sentence"]);
-export const bankItemSourceEnum = pgEnum("bank_item_source", ["bank_builder", "tutor_qna"]);
+export const vocabItemTypeEnum = pgEnum("vocab_item_type", ["word", "sentence"]);
+export const vocabItemSourceEnum = pgEnum("vocab_item_source", ["bank_builder", "tutor_qna"]);
 export const exerciseTypeEnum = pgEnum("exercise_type", ["writing", "speaking", "listening"]);
 export const srsCardStateEnum = pgEnum("srs_card_state", ["new", "learning", "review", "relearning"]);
 export const fsrsRatingEnum = pgEnum("fsrs_rating", ["again", "hard", "good", "easy"]);
@@ -26,33 +26,55 @@ export const topics = pgTable("topics", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const bankItems = pgTable(
-  "bank_items",
+/**
+ * Vocabulary is global, not per-topic: the same Spanish word/phrase used in
+ * multiple topics is ONE row here (and one shared SRS progress), linked to
+ * whichever topics use it via topicVocab. Only exact-string duplicates are
+ * merged this way — different grammatical forms of a word (plural, "yo" vs
+ * "nosotros" vs "ella" conjugations, etc.) are intentionally separate rows,
+ * since a learner can know one form without knowing another.
+ */
+export const vocabItems = pgTable(
+  "vocab_items",
+  {
+    id: serial("id").primaryKey(),
+    itemType: vocabItemTypeEnum("item_type").notNull(),
+    spanish: text("spanish").notNull(),
+    english: text("english").notNull(),
+    partOfSpeech: text("part_of_speech"),
+    source: vocabItemSourceEnum("source").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("vocab_items_spanish_unique").on(table.spanish)],
+);
+
+/** Which topics a vocab item belongs to (many-to-many). */
+export const topicVocab = pgTable(
+  "topic_vocab",
   {
     id: serial("id").primaryKey(),
     topicId: integer("topic_id")
       .notNull()
       .references(() => topics.id, { onDelete: "cascade" }),
-    itemType: bankItemTypeEnum("item_type").notNull(),
-    spanish: text("spanish").notNull(),
-    english: text("english").notNull(),
-    partOfSpeech: text("part_of_speech"),
-    source: bankItemSourceEnum("source").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    vocabItemId: integer("vocab_item_id")
+      .notNull()
+      .references(() => vocabItems.id, { onDelete: "cascade" }),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique("bank_items_topic_spanish_unique").on(table.topicId, table.spanish),
-    index("bank_items_topic_id_idx").on(table.topicId),
+    unique("topic_vocab_topic_item_unique").on(table.topicId, table.vocabItemId),
+    index("topic_vocab_vocab_item_id_idx").on(table.vocabItemId),
   ],
 );
 
+/** One shared SRS card per (vocabItem, exerciseType) — progress is not duplicated per topic. */
 export const srsState = pgTable(
   "srs_state",
   {
     id: serial("id").primaryKey(),
-    bankItemId: integer("bank_item_id")
+    vocabItemId: integer("vocab_item_id")
       .notNull()
-      .references(() => bankItems.id, { onDelete: "cascade" }),
+      .references(() => vocabItems.id, { onDelete: "cascade" }),
     exerciseType: exerciseTypeEnum("exercise_type").notNull(),
     dueAt: timestamp("due_at", { withTimezone: true }).notNull().defaultNow(),
     stability: real("stability").notNull().default(0),
@@ -66,7 +88,7 @@ export const srsState = pgTable(
     lastReviewAt: timestamp("last_review_at", { withTimezone: true }),
   },
   (table) => [
-    unique("srs_state_item_exercise_unique").on(table.bankItemId, table.exerciseType),
+    unique("srs_state_item_exercise_unique").on(table.vocabItemId, table.exerciseType),
     index("srs_state_exercise_due_idx").on(table.exerciseType, table.dueAt),
   ],
 );
@@ -75,13 +97,12 @@ export const exerciseAttempts = pgTable(
   "exercise_attempts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    topicId: integer("topic_id")
-      .notNull()
-      .references(() => topics.id, { onDelete: "cascade" }),
+    // Null for Mixed Review attempts, which aren't scoped to one topic.
+    topicId: integer("topic_id").references(() => topics.id, { onDelete: "cascade" }),
     exerciseType: exerciseTypeEnum("exercise_type").notNull(),
-    bankItemId: integer("bank_item_id")
+    vocabItemId: integer("vocab_item_id")
       .notNull()
-      .references(() => bankItems.id, { onDelete: "cascade" }),
+      .references(() => vocabItems.id, { onDelete: "cascade" }),
     status: attemptStatusEnum("status").notNull().default("pending"),
     generatedSpanish: text("generated_spanish").notNull(),
     generatedEnglish: text("generated_english").notNull(),
@@ -97,7 +118,7 @@ export const exerciseAttempts = pgTable(
   },
   (table) => [
     index("exercise_attempts_topic_id_idx").on(table.topicId),
-    index("exercise_attempts_bank_item_id_idx").on(table.bankItemId),
+    index("exercise_attempts_vocab_item_id_idx").on(table.vocabItemId),
   ],
 );
 
@@ -105,9 +126,8 @@ export const qnaLog = pgTable(
   "qna_log",
   {
     id: serial("id").primaryKey(),
-    topicId: integer("topic_id")
-      .notNull()
-      .references(() => topics.id, { onDelete: "cascade" }),
+    // Null for Mixed Review Q&A, which isn't scoped to one topic.
+    topicId: integer("topic_id").references(() => topics.id, { onDelete: "cascade" }),
     attemptId: uuid("attempt_id").references(() => exerciseAttempts.id, { onDelete: "cascade" }),
     questionText: text("question_text"),
     questionAudioTranscript: text("question_audio_transcript"),

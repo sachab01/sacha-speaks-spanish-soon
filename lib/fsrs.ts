@@ -118,3 +118,20 @@ export function ratingFromPronunciation(result: PronunciationCoachResult): FsrsR
   if (result.pronunciationScore >= 75) return "good";
   return "hard";
 }
+
+/**
+ * "Skill" as a live 0-100 score: FSRS's retrievability — the model's estimate
+ * of how likely you are to recall this right now. It rises when you review
+ * successfully (interval/stability grow) and decays continuously with time
+ * since the last review, which is exactly the "goes up and down" behavior
+ * a progress view should show, not just a static mastery label.
+ */
+export function computeRetrievability(
+  card: Pick<SrsCardData, "state" | "stability" | "lastReviewAt">,
+  now: Date = new Date(),
+): number {
+  if (card.state === "new" || !card.lastReviewAt) return 0;
+  const elapsedDays = Math.max(0, (now.getTime() - card.lastReviewAt.getTime()) / (1000 * 60 * 60 * 24));
+  const retrievability = scheduler.forgetting_curve(elapsedDays, card.stability);
+  return Math.round(retrievability * 100);
+}

@@ -4,14 +4,20 @@ import { Fragment, useEffect, useRef } from "react";
 
 import { QnaOverlay } from "@/components/qna/QnaOverlay";
 import { useMicRecorder } from "@/hooks/useMicRecorder";
-import { qnaPath, usePracticeSession, type PracticeScope } from "@/hooks/usePracticeSession";
+import {
+  qnaPath,
+  usePracticeSession,
+  type PracticeFocus,
+  type PracticeScope,
+} from "@/hooks/usePracticeSession";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { FeedbackCard } from "./FeedbackCard";
 
-export function SpeakingExercise({ scope }: { scope: PracticeScope }) {
+export function SpeakingExercise({ scope, focus = "due" }: { scope: PracticeScope; focus?: PracticeFocus }) {
   const { prompt, result, isLoading, isSubmitting, error, submitAudio, next } = usePracticeSession(
     scope,
     "speaking",
+    focus,
   );
   const { isRecording, error: micError, start, stop } = useMicRecorder();
   const { speak } = useSpeechSynthesis();
@@ -25,7 +31,7 @@ export function SpeakingExercise({ scope }: { scope: PracticeScope }) {
     // Always speak the correct Spanish sentence, win or lose, so the learner
     // hears a correct pronunciation model; feedback plays first, in English.
     speak(result.feedbackEn, "en-US");
-    window.setTimeout(() => speak(result.correctAnswerEs ?? "", "es-ES"), 3500);
+    window.setTimeout(() => speak(result.correctAnswerEs ?? "", "es-MX"), 3500);
   }, [result, prompt, speak]);
 
   async function handleToggleRecording() {
@@ -95,7 +101,7 @@ export function SpeakingExercise({ scope }: { scope: PracticeScope }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => speak(result.correctAnswerEs ?? "", "es-ES")}
+                    onClick={() => speak(result.correctAnswerEs ?? "", "es-MX")}
                     className="text-xs text-neutral-500 hover:underline"
                   >
                     🔊 Replay Spanish

@@ -25,6 +25,7 @@ const RESPONSE_SCHEMA = {
 const SYSTEM_INSTRUCTION = `You are generating a single short, natural Spanish practice sentence for a language learner.
 
 Rules:
+- Use MEXICAN Spanish throughout — vocabulary, phrasing, and grammar. Use "ustedes" for "you all", never "vosotros". Prefer Mexican lexical choices where they differ from Peninsular Spanish.
 - Use ONLY vocabulary from the whitelist given to you, plus ordinary Spanish function words (articles, pronouns, common prepositions/conjunctions, and basic conjugations of ser/estar/tener).
 - The sentence MUST include the given focus word/phrase, naturally inflected if it's a verb.
 - Combine the focus word with 1-3 other whitelist words/phrases to build a complete, natural sentence, rather than a bare restatement of the focus word alone.

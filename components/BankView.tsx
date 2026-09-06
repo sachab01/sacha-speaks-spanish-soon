@@ -1,6 +1,10 @@
-import type { bankItems } from "@/lib/db/schema";
-
-type BankItem = typeof bankItems.$inferSelect;
+type BankItem = {
+  id: number;
+  itemType: "word" | "sentence";
+  spanish: string;
+  english: string;
+  partOfSpeech: string | null;
+};
 
 export function BankView({ bankItems }: { bankItems: BankItem[] }) {
   const words = bankItems.filter((item) => item.itemType === "word");
