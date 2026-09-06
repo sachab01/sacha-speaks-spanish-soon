@@ -18,4 +18,6 @@ A Spanish-practice app: pick a topic, Gemini builds a word/sentence bank for it,
 
 ## Deployment
 
-Deployed on Vercel with the Vercel Postgres (Neon) integration. See the implementation plan for the full deployment checklist.
+Live at **https://spaans-two.vercel.app** — deployed on Vercel (project `sacha-17e7/spaans`), connected to the Neon Postgres project `cold-truth-97532120`. `GEMINI_API_KEY` and `DATABASE_URL` are set as Production environment variables in the Vercel project settings.
+
+To redeploy: `vercel --prod` from the project root (the GitHub repo isn't auto-deploy-connected yet — that needs the Vercel-for-GitHub app authorized from the Vercel dashboard's "Connect Git Repository" flow, a one-time manual step on GitHub's side).
