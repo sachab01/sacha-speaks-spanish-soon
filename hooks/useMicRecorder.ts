@@ -12,6 +12,7 @@ function pickSupportedMimeType(): string | undefined {
 /** Wraps getUserMedia + MediaRecorder for capturing a single mic recording as a Blob. */
 export function useMicRecorder() {
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -56,5 +57,22 @@ export function useMicRecorder() {
     });
   }, []);
 
-  return { isRecording, error, start, stop };
+  /** Pauses mid-recording (stops collecting audio) without ending the take — resume() continues into the same blob. */
+  const pause = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      recorder.pause();
+      setIsPaused(true);
+    }
+  }, []);
+
+  const resume = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "paused") {
+      recorder.resume();
+      setIsPaused(false);
+    }
+  }, []);
+
+  return { isRecording, isPaused, error, start, stop, pause, resume };
 }
