@@ -6,16 +6,27 @@ import { QnaOverlay } from "@/components/qna/QnaOverlay";
 import {
   qnaPath,
   usePracticeSession,
+  type AttemptResult,
   type PracticeFocus,
   type PracticeScope,
 } from "@/hooks/usePracticeSession";
 import { FeedbackCard } from "./FeedbackCard";
 
-export function WritingExercise({ scope, focus = "due" }: { scope: PracticeScope; focus?: PracticeFocus }) {
+export function WritingExercise({
+  scope,
+  focus = "due",
+  onResult,
+}: {
+  scope: PracticeScope;
+  focus?: PracticeFocus;
+  /** Fired with each graded attempt — e.g. for a wrapper that tallies session-only coverage stats. */
+  onResult?: (result: AttemptResult) => void;
+}) {
   const { prompt, result, isLoading, isSubmitting, error, submitText, next } = usePracticeSession(
     scope,
     "writing",
     focus,
+    onResult,
   );
   const [answer, setAnswer] = useState("");
 

@@ -49,7 +49,13 @@ async function parseJsonResponse(response: Response) {
 }
 
 /** Shared attempt lifecycle (fetch prompt, submit, grade, advance) for all three practice modes. */
-export function usePracticeSession(scope: PracticeScope, mode: PracticeMode, focus: PracticeFocus = "due") {
+export function usePracticeSession(
+  scope: PracticeScope,
+  mode: PracticeMode,
+  focus: PracticeFocus = "due",
+  /** Fired with each graded attempt — e.g. for a wrapper that tallies session-only coverage stats. */
+  onResult?: (result: AttemptResult) => void,
+) {
   const basePath = practiceBasePath(scope, mode);
   const nextUrl = focus === "due" ? `${basePath}/next` : `${basePath}/next?focus=${focus}`;
   const [prompt, setPrompt] = useState<Prompt | null>(null);
@@ -99,14 +105,16 @@ export function usePracticeSession(scope: PracticeScope, mode: PracticeMode, foc
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ attemptId: prompt.attemptId, userAnswerText }),
         });
-        setResult(await parseJsonResponse(response));
+        const data: AttemptResult = await parseJsonResponse(response);
+        setResult(data);
+        onResult?.(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         setIsSubmitting(false);
       }
     },
-    [basePath, prompt],
+    [basePath, prompt, onResult],
   );
 
   const submitAudio = useCallback(
@@ -119,14 +127,16 @@ export function usePracticeSession(scope: PracticeScope, mode: PracticeMode, foc
         formData.append("attemptId", prompt.attemptId);
         formData.append("audio", blob, "recording.webm");
         const response = await fetch(`${basePath}/attempt`, { method: "POST", body: formData });
-        setResult(await parseJsonResponse(response));
+        const data: AttemptResult = await parseJsonResponse(response);
+        setResult(data);
+        onResult?.(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         setIsSubmitting(false);
       }
     },
-    [basePath, prompt],
+    [basePath, prompt, onResult],
   );
 
   return { prompt, result, isLoading, isSubmitting, error, submitText, submitAudio, next: fetchNext };
