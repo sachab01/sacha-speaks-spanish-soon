@@ -29,6 +29,18 @@ export async function listTopics(): Promise<TopicSummary[]> {
     .orderBy(topics.createdAt);
 }
 
+/**
+ * Only removes the topic row and its topic_vocab links (both ON DELETE CASCADE)
+ * plus its topic-scoped exercise attempts/Q&A log — never the underlying
+ * vocab_items/srsState rows, since vocabulary is global/shared across topics
+ * (see the comment on `vocabItems` in schema.ts) and may still be in use by
+ * another topic. Returns false if the topic didn't exist.
+ */
+export async function deleteTopic(topicId: number): Promise<boolean> {
+  const deleted = await db.delete(topics).where(eq(topics.id, topicId)).returning({ id: topics.id });
+  return deleted.length > 0;
+}
+
 export async function getTopicWithBank(topicId: number) {
   const [topic] = await db.select().from(topics).where(eq(topics.id, topicId));
   if (!topic) return null;
@@ -93,10 +105,13 @@ export async function seedVocabEntries(topicId: number, entries: VocabEntry[], s
  * leaving a half-created topic behind. Reused vocab_items/srsState rows
  * are never touched by that rollback, since they aren't owned by this topic.
  */
-export async function createTopic(name: string) {
-  const bank = await generateBank(name);
+export async function createTopic(name: string, instructions?: string) {
+  const bank = await generateBank(name, instructions);
 
-  const [topic] = await db.insert(topics).values({ name }).returning();
+  const [topic] = await db
+    .insert(topics)
+    .values({ name, instructions: instructions ?? null })
+    .returning();
 
   try {
     const entries: VocabEntry[] = [
