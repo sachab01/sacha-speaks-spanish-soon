@@ -81,6 +81,8 @@ export function WritingExercise({
             correctAnswer={result.correctAnswerEs ?? ""}
             words={result.words}
             spanishToSpeak={result.correctAnswerEs}
+            gradedBy={result.gradedBy}
+            graderWarning={result.graderWarning}
             onNext={handleNext}
           />
         )}

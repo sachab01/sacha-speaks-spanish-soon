@@ -38,6 +38,18 @@ function verdictHighlightClass(verdict: WordVerdict["verdict"]): string {
     : "rounded bg-red-100 px-0.5 text-red-800 dark:bg-red-950 dark:text-red-300";
 }
 
+/** Short icon + text color per verdict, so the notes list is scannable at a glance and not color-only. */
+function verdictStyle(verdict: WordVerdict["verdict"]): { icon: string; textClass: string } {
+  switch (verdict) {
+    case "acceptable":
+      return { icon: "≈", textClass: "text-blue-600 dark:text-blue-400" };
+    case "missing":
+      return { icon: "∅", textClass: "text-red-600 dark:text-red-400" };
+    default:
+      return { icon: "✗", textClass: "text-red-600 dark:text-red-400" };
+  }
+}
+
 function HighlightedSentence({ sentence, words }: { sentence: string; words?: WordVerdict[] }) {
   if (!words || words.length === 0) return <>{sentence}</>;
   return (
@@ -63,6 +75,8 @@ export function FeedbackCard({
   correctAnswer,
   words,
   spanishToSpeak,
+  gradedBy,
+  graderWarning,
   extra,
   onNext,
 }: {
@@ -76,6 +90,9 @@ export function FeedbackCard({
   words?: WordVerdict[];
   /** When given, shows a button to hear this text spoken in Mexican Spanish. */
   spanishToSpeak?: string;
+  /** Which model graded this attempt. A warning banner only shows when this is "mistral" (the Gemini fallback fired). */
+  gradedBy?: "gemini" | "mistral";
+  graderWarning?: string | null;
   extra?: ReactNode;
   onNext: () => void;
 }) {
@@ -84,6 +101,11 @@ export function FeedbackCard({
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-neutral-200 p-4 dark:border-neutral-800">
+      {gradedBy === "mistral" && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          ⚠️ {graderWarning ?? "Gemini was unavailable — this was graded with a backup model and may be less accurate."}
+        </p>
+      )}
       <p className={correct ? "text-sm font-medium text-green-600" : "text-sm font-medium text-amber-600"}>
         {correct ? "Correct" : "Not quite"}
       </p>
@@ -108,20 +130,27 @@ export function FeedbackCard({
         )}
       </p>
       {notableWords.length > 0 && (
-        <ul className="flex flex-col gap-1 text-sm">
-          {notableWords.map((word, i) => (
-            <li
-              key={i}
-              className={word.verdict === "acceptable" ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"}
-            >
-              <span className="font-medium">{word.vocabWord ?? word.sentenceText}</span>
-              {word.userSaid && <span> — you said &ldquo;{word.userSaid}&rdquo;</span>}
-              {word.note && <span>: {word.note}</span>}
-            </li>
-          ))}
+        <ul className="flex flex-col gap-2 text-sm">
+          {notableWords.map((word, i) => {
+            const { icon, textClass } = verdictStyle(word.verdict);
+            return (
+              <li key={i} className="flex flex-col gap-0.5">
+                <div className={`flex flex-wrap items-baseline gap-x-1.5 font-medium ${textClass}`}>
+                  <span aria-hidden="true">{icon}</span>
+                  <span>{word.vocabWord ?? word.sentenceText}</span>
+                  {word.userSaid && (
+                    <span className="font-normal text-neutral-500">
+                      — you wrote &ldquo;{word.userSaid}&rdquo;
+                    </span>
+                  )}
+                </div>
+                {word.note && <p className="pl-4 text-xs text-neutral-500 dark:text-neutral-400">{word.note}</p>}
+              </li>
+            );
+          })}
         </ul>
       )}
-      <p className="text-sm text-neutral-700 dark:text-neutral-300">{feedbackEn}</p>
+      <p className="text-xs text-neutral-500 dark:text-neutral-400">{feedbackEn}</p>
       {extra}
       <button
         type="button"

@@ -174,6 +174,8 @@ export function ListeningExercise({
             userAnswer={answer}
             correctAnswer={result.correctAnswerEn ?? ""}
             words={result.words}
+            gradedBy={result.gradedBy}
+            graderWarning={result.graderWarning}
             onNext={handleNext}
             extra={
               <p className="text-sm text-neutral-500">
