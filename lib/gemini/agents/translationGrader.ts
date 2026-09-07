@@ -1,7 +1,8 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../../mistral/client";
+import { callStructured as callGemini } from "../client";
+import { callStructured as callMistral } from "../../mistral/client";
 
 const VERDICT_VALUES = ["correct", "acceptable", "wrong", "missing"] as const;
 
@@ -39,8 +40,19 @@ export type WordVerdict = {
   note: string | null;
 };
 
-export type TranslationGradeResult = { words: WordVerdict[]; feedback: string };
+export type TranslationGradeResult = {
+  words: WordVerdict[];
+  feedback: string;
+  gradedBy: "gemini" | "mistral";
+  /** Set only when gradedBy is "mistral" — explains why the Gemini call was skipped/failed. */
+  graderWarning: string | null;
+};
 export type TranslationDirection = "en_to_es" | "es_to_en";
+
+/** Gemini's client already retries 429/503 internally; if it still throws with this status, the daily free-tier quota is exhausted rather than a transient blip. */
+function isQuotaError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "status" in error && (error as { status?: number }).status === 429;
+}
 
 const RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -87,13 +99,15 @@ Do not skip any actual word, even if the rest of the answer is otherwise correct
 - "wrong": a real error — either a genuinely different word with a different meaning (see THIRD CRITICAL RULE), or a garbled spelling of the intended word, or a grammar mistake. Set "note" to a short, specific reason, correctly framed as either a wrong word (state both meanings) or a spelling slip (state the intended word), e.g. "wrong verb — 'trae' (brings) not 'llevar' (to carry away)", "feminine adjectives end in -a".
 - "missing": the learner's answer never addressed this word/concept at all. Set "note" briefly explaining what's missing.
 
+Keep every "note" short and concrete: under 12 words, stating only the correct Spanish word/phrase and why, or what the learner's word actually means and why it's wrong — no more. Never restate a correction that belongs to a different entry's span; each entry's "note" covers only its own word/phrase, even if a neighboring entry is also wrong.
+
 "vocabWord" in your response must exactly repeat the vocab word it corresponds to, verbatim, from the list you were given.
 "sentenceText" must be the exact substring, copied character-for-character, from the "Expected translation" text given below, that corresponds to this vocab word — this is used to highlight it directly in the displayed sentence, so it must be findable verbatim in that text (if the SECOND CRITICAL RULE applies and several vocab words share one combined phrase, they can share the same "sentenceText").
 "userSaid" is whatever word/phrase in the learner's answer corresponds to this vocab word (null if "missing").
 
 If the learner's answer is blank or clearly not a real attempt, mark every vocab word "missing".
 
-"feedback": 1-2 short, encouraging sentences in English summarizing what went well and what to work on — this supplements the per-word breakdown, it doesn't need to repeat every detail already captured there.`;
+"feedback": AT MOST one short, plain sentence in English — no encouragement or filler phrases ("great job", "don't forget", "keep practicing"). State only the single most important concrete thing to fix (what's wrong and what the correct Spanish is), or exactly "All correct." if there were no "wrong"/"missing" verdicts. Don't repeat detail already captured in the per-word notes.`;
 
 /** Whether any real error exists — drives the UI's "Correct"/"Not quite" badge. Synonym use ("acceptable") doesn't count as a mistake. */
 export function hadMistakes(words: WordVerdict[]): boolean {
@@ -110,7 +124,7 @@ export async function gradeTranslation(params: {
   const { expected, userAnswer, direction, wordsUsed } = params;
   const directionLabel = direction === "en_to_es" ? "English to Spanish" : "Spanish to English";
 
-  const raw = await callStructured({
+  const callParams = {
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt: `Direction: ${directionLabel}
 Expected translation: "${expected}"
@@ -118,7 +132,23 @@ Vocab words this sentence was built from: ${wordsUsed.join(", ")}
 Learner's answer: "${userAnswer.trim() || "(blank)"}"`,
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: TranslationGradeSchema,
-  });
+  };
+
+  let raw: z.infer<typeof TranslationGradeSchema>;
+  let gradedBy: "gemini" | "mistral";
+  let graderWarning: string | null;
+  try {
+    raw = await callGemini(callParams);
+    gradedBy = "gemini";
+    graderWarning = null;
+  } catch (error) {
+    console.error("Gemini grading failed, falling back to Mistral", error);
+    raw = await callMistral(callParams);
+    gradedBy = "mistral";
+    graderWarning = isQuotaError(error)
+      ? "Gemini's free daily quota is used up — this was graded with a backup model, which may be less accurate."
+      : "Gemini was temporarily unavailable — this was graded with a backup model, which may be less accurate.";
+  }
 
   return {
     // Free-form prose the model writes fresh can carry stray markdown emphasis
@@ -126,6 +156,8 @@ Learner's answer: "${userAnswer.trim() || "(blank)"}"`,
     // not rendered as markdown. sentenceText/vocabWord/userSaid aren't touched:
     // they need to stay exact substrings for matching/highlighting.
     feedback: stripMarkdown(raw.feedback),
+    gradedBy,
+    graderWarning,
     words: raw.words.map((w) => ({
       vocabWord: w.vocabWord ?? null,
       // Falls back to an empty string (never matches anything) rather than
