@@ -38,15 +38,25 @@ function verdictHighlightClass(verdict: WordVerdict["verdict"]): string {
     : "rounded bg-red-100 px-0.5 text-red-800 dark:bg-red-950 dark:text-red-300";
 }
 
-/** Short icon + text color per verdict, so the notes list is scannable at a glance and not color-only. */
-function verdictStyle(verdict: WordVerdict["verdict"]): { icon: string; textClass: string } {
-  switch (verdict) {
+/**
+ * Short icon + text color per verdict, so the notes list is scannable at a
+ * glance and not color-only (color alone isn't reliable here — the solid-color
+ * practice card skins flatten these text colors to a single tone, see
+ * app/globals.css's `.practice-card-cream`/`.practice-card-ink` overrides).
+ * A "wrong" verdict gets its own icon when `minorMistake` is set — a spelling
+ * slip or recognizable near-miss reads very differently from a genuinely
+ * wrong word, and shouldn't look identical in the list.
+ */
+function verdictStyle(word: WordVerdict): { icon: string; textClass: string } {
+  switch (word.verdict) {
     case "acceptable":
       return { icon: "≈", textClass: "text-blue-600 dark:text-blue-400" };
     case "missing":
       return { icon: "∅", textClass: "text-red-600 dark:text-red-400" };
     default:
-      return { icon: "✗", textClass: "text-red-600 dark:text-red-400" };
+      return word.minorMistake
+        ? { icon: "±", textClass: "text-amber-600 dark:text-amber-400" }
+        : { icon: "✗", textClass: "text-red-600 dark:text-red-400" };
   }
 }
 
@@ -132,7 +142,7 @@ export function FeedbackCard({
       {notableWords.length > 0 && (
         <ul className="flex flex-col gap-2 text-sm">
           {notableWords.map((word, i) => {
-            const { icon, textClass } = verdictStyle(word.verdict);
+            const { icon, textClass } = verdictStyle(word);
             return (
               <li key={i} className="flex flex-col gap-0.5">
                 <div className={`flex flex-wrap items-baseline gap-x-1.5 font-medium ${textClass}`}>

@@ -25,6 +25,8 @@ const RawWordVerdictSchema = z.object({
   userSaid: z.string().nullable().optional(),
   verdict: z.enum(VERDICT_VALUES),
   note: z.string().nullable().optional(),
+  /** Only meaningful when verdict is "wrong" — a spelling slip or a near-miss that would likely still be understood, rather than a genuinely different/wrong word. */
+  minorMistake: z.boolean().nullable().optional(),
 });
 
 const TranslationGradeSchema = z.object({
@@ -38,6 +40,8 @@ export type WordVerdict = {
   userSaid: string | null;
   verdict: (typeof VERDICT_VALUES)[number];
   note: string | null;
+  /** Only meaningful when verdict is "wrong" — a spelling slip or a near-miss that would likely still be understood, rather than a genuinely different/wrong word. */
+  minorMistake: boolean;
 };
 
 export type TranslationGradeResult = {
@@ -67,8 +71,9 @@ const RESPONSE_SCHEMA = {
           userSaid: { type: Type.STRING, nullable: true },
           verdict: { type: Type.STRING, enum: [...VERDICT_VALUES] },
           note: { type: Type.STRING, nullable: true },
+          minorMistake: { type: Type.BOOLEAN, nullable: true },
         },
-        required: ["vocabWord", "sentenceText", "userSaid", "verdict", "note"],
+        required: ["vocabWord", "sentenceText", "userSaid", "verdict", "note", "minorMistake"],
       },
     },
     feedback: { type: Type.STRING },
@@ -97,6 +102,7 @@ Do not skip any actual word, even if the rest of the answer is otherwise correct
 - "correct": the learner produced this word (or an equivalent inflected form of it) correctly, per the CRITICAL RULE above.
 - "acceptable": the learner used a different, valid word/phrase with essentially the SAME real-world meaning instead of this one (a true synonym or rephrasing) — per the THIRD CRITICAL RULE, this does NOT apply if the word they used has a different meaning. Set "note" to name what they used and briefly characterize it, e.g. "you used 'copa' — a common, equally natural synonym for 'vaso' (glass)" or "...an unusual/formal choice for everyday speech". Always fill this in for "acceptable" — it's useful feedback even though it isn't an error.
 - "wrong": a real error — either a genuinely different word with a different meaning (see THIRD CRITICAL RULE), or a garbled spelling of the intended word, or a grammar mistake. Set "note" to a specific reason, correctly framed as either a wrong word (state both meanings) or a spelling slip (state the intended word), e.g. "wrong verb — 'trae' (brings) not 'llevar' (to carry away)", "feminine adjectives end in -a". If the learner's word isn't a real word but is a recognizable near-miss of the correct one (e.g. an anglicized guess, a half-remembered conjugation), say so — note that it would likely still be understood, alongside the standard word to use instead — rather than only calling it "wrong" with no acknowledgment that it's close.
+  Set "minorMistake" to true for a spelling slip or a recognizable near-miss (the kind described just above) — anything a native speaker would likely still understand despite being non-standard. Set it to false for a genuinely different/wrong word, a grammar mistake, or anything that would likely confuse a native speaker.
 - "missing": the learner's answer never addressed this word/concept at all. Before using this verdict, re-scan the learner's ENTIRE answer (not just the words near this one) for this exact word/phrase or an inflected form of it — a neighboring word being wrong must never cause you to overlook a correct word sitting right next to it. If it's genuinely present anywhere in the answer, grade it "correct"/"acceptable"/"wrong" instead — never "missing" for a word the learner actually wrote. Set "note" briefly explaining what's missing.
 
 Keep every "note" concrete and no longer than it needs to be — most fit in a short phrase, but let a note run to a full sentence when there's something worth explaining (like the near-miss/likely-understood case above). Never pad with encouragement or filler, and never restate a correction that belongs to a different entry's span; each entry's "note" covers only its own word/phrase, even if a neighboring entry is also wrong.
@@ -104,6 +110,7 @@ Keep every "note" concrete and no longer than it needs to be — most fit in a s
 "vocabWord" in your response must exactly repeat the vocab word it corresponds to, verbatim, from the list you were given.
 "sentenceText" must be the exact substring, copied character-for-character, from the "Expected translation" text given below, that corresponds to this vocab word — this is used to highlight it directly in the displayed sentence, so it must be findable verbatim in that text (if the SECOND CRITICAL RULE applies and several vocab words share one combined phrase, they can share the same "sentenceText").
 "userSaid" is whatever word/phrase in the learner's answer corresponds to this vocab word (null if "missing").
+For "correct", "acceptable", and "missing" verdicts, always set "minorMistake" to false — it's only meaningful for "wrong".
 
 If the learner's answer is blank or clearly not a real attempt, mark every vocab word "missing".
 
@@ -167,6 +174,7 @@ Learner's answer: "${userAnswer.trim() || "(blank)"}"`,
       userSaid: w.userSaid ?? null,
       verdict: w.verdict,
       note: w.note ? stripMarkdown(w.note) : null,
+      minorMistake: w.minorMistake ?? false,
     })),
   };
 }

@@ -341,6 +341,7 @@ export async function submitTranslationAttempt(params: {
       userSaid: null,
       verdict: "missing" as const,
       note: null,
+      minorMistake: false,
     }));
     feedback = "You didn't write anything — here's the correct answer.";
   } else if (normalizeForExactMatch(userAnswerText) === normalizeForExactMatch(expected)) {
@@ -350,6 +351,7 @@ export async function submitTranslationAttempt(params: {
       userSaid: vocabWord,
       verdict: "correct" as const,
       note: null,
+      minorMistake: false,
     }));
     feedback = "Correct!";
   } else {

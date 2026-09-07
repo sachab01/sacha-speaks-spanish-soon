@@ -28,6 +28,8 @@ export type WordVerdict = {
   userSaid: string | null;
   verdict: "correct" | "acceptable" | "wrong" | "missing";
   note: string | null;
+  /** Only meaningful when verdict is "wrong" — a spelling slip or a near-miss that would likely still be understood, rather than a genuinely different/wrong word. */
+  minorMistake: boolean;
 };
 
 export type AttemptResult = {
