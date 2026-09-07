@@ -20,7 +20,9 @@ export type WordSkill = {
 };
 
 export type SkillSummary = {
+  /** Vocab items only (itemType "word") — sentences are counted separately, not blended in. */
   wordCount: number;
+  sentenceCount: number;
   averageSkill: Record<ExerciseType, number>;
   newCount: number;
 };
@@ -37,7 +39,12 @@ function summarize(words: WordSkill[]): SkillSummary {
     if (word.isNew) newCount += 1;
   }
 
-  return { wordCount: words.length, averageSkill, newCount };
+  return {
+    wordCount: words.filter((w) => w.itemType === "word").length,
+    sentenceCount: words.filter((w) => w.itemType === "sentence").length,
+    averageSkill,
+    newCount,
+  };
 }
 
 function buildWordSkills(
