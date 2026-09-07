@@ -330,6 +330,10 @@ export async function submitTranslationAttempt(params: {
   // translation can be a valid synonym/rephrasing that never matches exactly.
   let words: WordVerdict[];
   let feedback: string;
+  // Only set when the grader model was actually called — the fast paths below
+  // are deterministic and involve no model, so there's nothing to report.
+  let gradedBy: "gemini" | "mistral" | undefined;
+  let graderWarning: string | null | undefined;
   if (userAnswerText.trim() === "") {
     words = wordsUsed.map((vocabWord) => ({
       vocabWord,
@@ -350,6 +354,8 @@ export async function submitTranslationAttempt(params: {
     feedback = "Correct!";
   } else {
     const grade = await gradeTranslation({ expected, userAnswer: userAnswerText, direction, wordsUsed });
+    gradedBy = grade.gradedBy;
+    graderWarning = grade.graderWarning;
     // The grader doesn't reliably follow the "accents/capitalization/punctuation
     // never count as wrong" instruction on its own (verified live — it slips some
     // of the time, including inventing a "missing" verdict for a bare punctuation
@@ -422,6 +428,8 @@ export async function submitTranslationAttempt(params: {
     words,
     correctAnswerEs: attempt.generatedSpanish,
     correctAnswerEn: attempt.generatedEnglish,
+    gradedBy,
+    graderWarning,
   };
 }
 

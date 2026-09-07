@@ -38,6 +38,10 @@ export type AttemptResult = {
   correctAnswerEn?: string;
   transcript?: string;
   pronunciationScore?: number;
+  /** Which model actually graded this attempt — only set when the grader model was called (not the deterministic blank/exact-match fast paths). */
+  gradedBy?: "gemini" | "mistral";
+  /** Set only when gradedBy is "mistral" — explains why Gemini was skipped/failed, for display. */
+  graderWarning?: string | null;
 };
 
 async function parseJsonResponse(response: Response) {
