@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { FocusSelector } from "@/components/practice/FocusSelector";
-import { ListeningExercise } from "@/components/practice/ListeningExercise";
+import { MixedPracticeSessionPanel } from "@/components/practice/MixedPracticeSessionPanel";
 import { PRACTICE_MODE_STYLES } from "@/components/practice/practiceCardStyles";
-import { SpeakingExercise } from "@/components/practice/SpeakingExercise";
-import { WritingExercise } from "@/components/practice/WritingExercise";
 import { PRACTICE_FOCUSES, parsePracticeMode, type PracticeFocus } from "@/lib/api-utils";
+import { getTopicWithBank, listTopics } from "@/lib/db/topics";
+import type { TopicItemInfo } from "@/lib/practiceStats";
 
 export default async function MixedPracticePage({
   params,
@@ -25,8 +24,17 @@ export default async function MixedPracticePage({
     ? (focusParam as PracticeFocus)
     : "due";
 
-  const scope = { mixed: true as const };
   const basePath = `/practice/mixed/${mode}`;
+
+  const topics = await listTopics();
+  const topicBanks = await Promise.all(topics.map((topic) => getTopicWithBank(topic.id)));
+  const itemInfoByText: Record<string, TopicItemInfo> = {};
+  for (const bank of topicBanks) {
+    if (!bank) continue;
+    for (const item of bank.bankItems) {
+      itemInfoByText[item.spanish.trim().toLowerCase()] = { topicId: bank.topic.id, itemType: item.itemType };
+    }
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-6 px-6 py-10 md:px-12">
@@ -42,13 +50,18 @@ export default async function MixedPracticePage({
       <div
         className={`w-full max-w-2xl rounded-lg p-6 sm:p-8 ${PRACTICE_MODE_STYLES[mode].bg} ${PRACTICE_MODE_STYLES[mode].text} ${PRACTICE_MODE_STYLES[mode].overrides}`}
       >
-        <div className="mb-5">
-          <FocusSelector basePath={basePath} current={focus} inverted />
-        </div>
-
-        {mode === "writing" && <WritingExercise scope={scope} focus={focus} />}
-        {mode === "speaking" && <SpeakingExercise scope={scope} focus={focus} />}
-        {mode === "listening" && <ListeningExercise scope={scope} focus={focus} />}
+        <MixedPracticeSessionPanel
+          mode={mode}
+          focus={focus}
+          basePath={basePath}
+          topics={topics.map((topic) => ({
+            id: topic.id,
+            name: topic.name,
+            wordCount: topic.wordCount,
+            sentenceCount: topic.sentenceCount,
+          }))}
+          itemInfoByText={itemInfoByText}
+        />
       </div>
     </main>
   );

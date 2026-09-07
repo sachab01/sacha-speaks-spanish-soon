@@ -3,7 +3,10 @@ import Link from "next/link";
 import { TopicCreateForm } from "@/components/TopicCreateForm";
 import { TopicPracticeMenu } from "@/components/TopicPracticeMenu";
 import { ArrowRightIcon, MicIcon, PencilIcon, SpeakerIcon } from "@/components/ui/icons";
+import { CoverageBar } from "@/components/ui/CoverageBar";
+import { getTopicSkillOverview } from "@/lib/db/progress";
 import { listTopics } from "@/lib/db/topics";
+import { computeCoverage } from "@/lib/practiceStats";
 
 // Otherwise Next statically prerenders this at build time and bakes in
 // whatever topics existed then, instead of the live list.
@@ -17,6 +20,14 @@ const MIXED_MODES = [
 
 export default async function HomePage() {
   const topics = await listTopics();
+  const coverageByTopic = new Map(
+    await Promise.all(
+      topics.map(async (topic) => {
+        const { words } = await getTopicSkillOverview(topic.id);
+        return [topic.id, computeCoverage(words)] as const;
+      }),
+    ),
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-10 px-6 py-10 md:px-12">
@@ -65,25 +76,34 @@ export default async function HomePage() {
           </p>
         ) : (
           <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {topics.map((topic) => (
-              <li
-                key={topic.id}
-                className="flex flex-col gap-3 rounded-lg bg-accent-600 p-5 text-[var(--background)] transition-colors hover:bg-accent-700"
-              >
-                <Link href={`/topics/${topic.id}`} className="flex min-w-0 flex-1 items-center gap-3">
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-lg font-bold">{topic.name}</span>
-                    <span className="text-sm font-bold text-[var(--background)]/80">
-                      {topic.wordCount} words · {topic.sentenceCount} sentences
+            {topics.map((topic) => {
+              const coverage = coverageByTopic.get(topic.id);
+              return (
+                <li
+                  key={topic.id}
+                  className="flex flex-col gap-3 rounded-lg bg-accent-600 p-5 text-[var(--background)] transition-colors hover:bg-accent-700"
+                >
+                  <Link href={`/topics/${topic.id}`} className="flex min-w-0 flex-1 items-center gap-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-lg font-bold">{topic.name}</span>
+                      <span className="text-sm font-bold text-[var(--background)]/80">
+                        {topic.wordCount} words · {topic.sentenceCount} sentences
+                      </span>
                     </span>
-                  </span>
-                  <ArrowRightIcon className="h-4 w-4 shrink-0" />
-                </Link>
-                <div>
-                  <TopicPracticeMenu topicId={topic.id} />
-                </div>
-              </li>
-            ))}
+                    <ArrowRightIcon className="h-4 w-4 shrink-0" />
+                  </Link>
+                  {coverage && (
+                    <div className="flex flex-col gap-2">
+                      <CoverageBar label="Words" stats={coverage.words} variant="cream" />
+                      <CoverageBar label="Sentences" stats={coverage.sentences} variant="cream" />
+                    </div>
+                  )}
+                  <div>
+                    <TopicPracticeMenu topicId={topic.id} />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { BankView } from "@/components/BankView";
 import { SkillSummary } from "@/components/progress/SkillSummary";
 import { SkillTable } from "@/components/progress/SkillTable";
+import { TopicDeleteButton } from "@/components/TopicDeleteButton";
 import { MicIcon, PencilIcon, SpeakerIcon } from "@/components/ui/icons";
 import { getTopicSkillOverview } from "@/lib/db/progress";
 import { getTopicWithBank } from "@/lib/db/topics";
@@ -30,13 +31,16 @@ export default async function TopicPage({ params }: { params: Promise<{ topicId:
 
   return (
     <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-8 px-6 py-10 md:px-12">
-      <div>
-        <Link href="/" className="text-sm font-bold text-accent-600 hover:text-accent-700 dark:text-accent-400">
-          ← All topics
-        </Link>
-        <h1 className="font-display mt-2 text-3xl font-bold text-accent-600 dark:text-accent-400">
-          {topic.name}
-        </h1>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link href="/" className="text-sm font-bold text-accent-600 hover:text-accent-700 dark:text-accent-400">
+            ← All topics
+          </Link>
+          <h1 className="font-display mt-2 text-3xl font-bold text-accent-600 dark:text-accent-400">
+            {topic.name}
+          </h1>
+        </div>
+        <TopicDeleteButton topicId={topic.id} topicName={topic.name} />
       </div>
 
       <nav className="grid grid-cols-1 gap-4 sm:grid-cols-3">
