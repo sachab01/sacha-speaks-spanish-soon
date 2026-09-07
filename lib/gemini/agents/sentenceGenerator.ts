@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../../mistral/client";
+import { callStructured } from "../client";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 
 const SentenceGeneratorResultSchema = z.object({
