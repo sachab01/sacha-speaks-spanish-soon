@@ -81,7 +81,18 @@ function focusOrderBy(focus: PracticeFocus): SQL[] {
       return [asc(sql`coalesce(${srsState.lastReviewAt}, to_timestamp(0))`), asc(srsState.dueAt)];
     case "due":
     default:
-      return [asc(srsState.dueAt)];
+      return [
+        // Prioritize items actively being relearned after a recent lapse —
+        // otherwise a just-failed word's short relearning interval still sorts
+        // behind an entire backlog of far-older "new"/"review" due dates
+        // (all seeded at roughly bank-creation time) and effectively never
+        // resurfaces. A never-reviewed ("new") item has no genuine due-date
+        // urgency yet — its "due" timestamp is just its creation time — so
+        // order those randomly instead of by insertion sequence, rather than
+        // always drilling a fresh topic in the same fixed order.
+        sql`(case ${srsState.state} when 'learning' then 0 when 'relearning' then 0 when 'review' then 1 else 2 end)`,
+        sql`case when ${srsState.state} = 'new' then random() else extract(epoch from ${srsState.dueAt}) end`,
+      ];
   }
 }
 
