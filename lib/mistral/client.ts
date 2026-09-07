@@ -11,11 +11,12 @@ if (!apiKey) {
 // verified empirically per-account at https://admin.mistral.ai/plateforme/limits,
 // since the API returns 429/403 for models the console lists but doesn't
 // actually grant. ministral-14b-2512 is the best-quality model confirmed
-// accessible on this account's free tier; used for the text-only agents
-// (bank building, sentence generation, translation grading, text Q&A) so
-// those high-frequency calls don't compete with Gemini's quota, which is
-// reserved for the audio-understanding agents Mistral's free tier can't do
-// (pronunciation grading, spoken Q&A).
+// accessible on this account's free tier; used for the remaining text-only
+// agents (bank building, text Q&A) so those high-frequency calls don't
+// compete with Gemini's quota, which covers the audio-understanding agents
+// (pronunciation grading, spoken Q&A) plus translation grading and sentence
+// generation. Also serves as the automatic fallback for translation grading
+// if the Gemini call fails.
 export const MISTRAL_MODEL = process.env.MISTRAL_MODEL ?? "ministral-14b-2512";
 
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";

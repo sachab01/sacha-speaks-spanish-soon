@@ -15,6 +15,10 @@ export const ai = new GoogleGenAI({ apiKey });
 // development) — far too low for real use; the lite variant has a much higher
 // free daily quota while still handling our structured-JSON + audio calls
 // fine. Overridable via env if a better option needs to be swapped in later.
+// Shared across the audio-understanding agents (pronunciation grading, spoken
+// Q&A) and the two highest-frequency text agents (translation grading,
+// sentence generation) — the latter fall back to Mistral (grading) or simply
+// error (sentence generation) if this quota is exhausted.
 export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
 
 const TRANSIENT_STATUS_CODES = new Set([429, 503]);
