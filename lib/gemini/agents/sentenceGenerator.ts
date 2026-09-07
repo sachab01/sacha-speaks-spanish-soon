@@ -31,6 +31,7 @@ const SYSTEM_INSTRUCTION = `You are generating a single short, natural Spanish p
 
 Rules:
 - Use MEXICAN Spanish throughout — vocabulary, phrasing, and grammar. Use "ustedes" for "you all", never "vosotros". Prefer Mexican lexical choices where they differ from Peninsular Spanish.
+- PRESENT TENSE ONLY — the learner isn't ready for past tense yet. Never use pretérito or imperfecto conjugations (e.g. never "fui", "tuve", "estaba", "hablé"); every verb must be in the present (or present-adjacent: commands, "voy a + infinitive" for near-future) regardless of what the topic or focus word might suggest.
 - Use ONLY vocabulary from the whitelist given to you, plus ordinary Spanish function words (articles, pronouns, common prepositions/conjunctions, and basic conjugations of ser/estar/tener).
 - The sentence MUST include the given focus word/phrase, naturally inflected if it's a verb.
 - Combine the focus word with 1-3 other whitelist words/phrases to build a complete, natural sentence, rather than a bare restatement of the focus word alone. If a "preferred words" list is given and any fit naturally, favor those over other whitelist words for this supporting role — they're words the learner needs more practice on.
