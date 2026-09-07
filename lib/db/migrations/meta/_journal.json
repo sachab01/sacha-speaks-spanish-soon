@@ -15,6 +15,13 @@
       "when": 1788709598927,
       "tag": "0001_kind_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788725784548,
+      "tag": "0002_whole_stature",
+      "breakpoints": true
     }
   ]
 }

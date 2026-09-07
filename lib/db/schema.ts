@@ -23,6 +23,8 @@ export const attemptStatusEnum = pgEnum("attempt_status", ["pending", "graded"])
 export const topics = pgTable("topics", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  /** Optional freeform guidance from the learner on what kinds of words/sentences to generate (register, subtopic, etc.) — passed to bankBuilder alongside the name. */
+  instructions: text("instructions"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
