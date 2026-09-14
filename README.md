@@ -5,11 +5,17 @@ A Spanish-practice app: pick a topic, an LLM generates a word/sentence bank for 
 
 > **Status: work in progress.** This is a personal side project I'm actively building and using myself — not a finished product. See [Known limitations](#known-limitations--roadmap) below for what's still missing.
 
+![Home page: create a topic, jump into mixed review, or pick from your topics](docs/screenshots/home.png)
+
 ## What makes this different from flashcards
 
 The core idea: **you should never be able to memorize the sentence instead of learning the word.** Most vocab apps quiz you on a fixed bank of pre-written sentences, so after enough repetitions you're pattern-matching the sentence, not recalling the word. Here, every practice attempt asks Gemini to generate a brand-new sentence on the spot — it must use the specific word being tested plus 1-3 other words you already know, combined into something a native speaker would actually say, and it's steered away from repeating recent sentences for that word. So the same word keeps showing up in different, realistic contexts instead of the same memorized line.
 
 That's paired with per-word spaced repetition (FSRS) rather than per-topic or per-deck scheduling, so what surfaces for review is driven by what you're actually about to forget, across every topic at once.
+
+![Per-topic progress: words/sentences tracked and % mastery per mode](docs/screenshots/topics-grid.png)
+
+![Per-word skill breakdown for a topic, split by writing/speaking/listening](docs/screenshots/topic-progress.png)
 
 It also treats writing, speaking, and listening as three equally-weighted, on-demand modes rather than one dominant mode with the others sprinkled in occasionally. Most apps default hard to reading/writing and surface a listening exercise every so often as a change of pace; here you can drill listening (or speaking) as much as you want, whenever you want, on the same underlying vocabulary.
 
@@ -23,6 +29,8 @@ Feedback is per-word, not one verdict for the whole answer. Each word in your tr
 - **Three exercise types** — writing (typed translation, graded per-word), speaking (recorded via the mic, checked for pronunciation), and listening (a sentence is spoken via TTS, you type the English translation, graded the same way as writing).
 - **Mixed review mode** — practice across all topics at once, focused on your weakest or most stale items rather than one topic in isolation.
 - **Spaced repetition (FSRS)** — every attempt updates a per-word retrievability estimate; the "skill overview" page shows live recall estimates per word, per topic, and overall, decaying continuously between reviews.
+- **Per-topic progress at a glance** — the topics grid shows words/sentences tracked and % mastery per mode for each topic, so you can see where to focus before diving in.
+- **Delete a topic** — remove one you don't need anymore (cascades its words/sentences/attempts).
 - **In-exercise Q&A** — ask a grammar/vocab question mid-exercise without losing your place in the review queue.
 - **Locked to Mexican Spanish** — generation and grading are pinned to one dialect/register for consistency.
 
@@ -49,7 +57,7 @@ There's no seed data — the first thing to do after setup is create a topic fro
 This is mid-build, not finished. Notably:
 
 - **No authentication.** Everything is single-user by design right now; there's no login or per-user data separation.
-- **No way to delete topics or words yet.** Deletion cascades exist at the DB level, but there's no user-facing action to trigger one.
+- **No way to delete individual words yet.** Whole topics can be deleted (cascading their words/sentences/attempts), but there's no per-word deletion.
 - **Model/task assignment is still being balanced.** Gemini and Mistral are now split by task (audio-understanding + translation grading + sentence generation on Gemini, bank-building/tutor text on Mistral, with Mistral as an automatic fallback for grading), but that split — and the choice of model/settings within each provider — is still being tuned rather than settled.
 - **Repeat-avoidance is a soft prompt hint, not a hard guarantee.** The sentence generator is told which recent sentences to avoid, but nothing enforces novelty deterministically — could still use more deterministic scaffolding around the LLM calls generally.
 - **Prompts are still being tuned.** Generation/grading quality varies by topic and needs more iteration.
@@ -57,7 +65,7 @@ This is mid-build, not finished. Notably:
 - **No rate limiting or cost guards** around the Gemini/Mistral calls — fine for personal use, not safe to expose publicly as-is.
 - Mobile layout and cross-browser mic/speech-API support haven't been hardened.
 
-Because of the first two points, this repo doesn't link a public live demo — it's meant to be run locally by anyone reviewing the code.
+Because of the lack of authentication — anyone hitting a public instance could create, practice, or delete topics as if they were you — this repo doesn't link a public live demo. It's meant to be run locally by anyone reviewing the code.
 
 ## License
 
