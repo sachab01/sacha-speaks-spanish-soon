@@ -41,3 +41,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .neon
+
+# AI coding tool config/docs (not app code)
+AGENTS.md
+CLAUDE.md
+.claude/
+skills-lock.json
+
+# personal notes
+covered.md
