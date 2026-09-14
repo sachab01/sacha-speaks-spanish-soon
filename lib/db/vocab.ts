@@ -10,7 +10,7 @@ export type NewVocabInput = {
   english: string;
   itemType: "word" | "sentence";
   partOfSpeech?: string | null;
-  source: "bank_builder" | "tutor_qna";
+  source: "bank_builder" | "tutor_qna" | "core_vocab";
 };
 
 /**

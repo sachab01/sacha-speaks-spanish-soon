@@ -1,7 +1,7 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../client";
+import { callStructured } from "../../mistral/client";
 
 const BankBuilderResultSchema = z.object({
   words: z.array(
@@ -60,14 +60,18 @@ Use MEXICAN Spanish throughout — vocabulary, phrasing, and grammar (e.g. "uste
 Guidelines:
 - Produce 12-20 words: the most common, directly useful nouns, verbs, and adjectives for the topic. Use dictionary/citation form in "spanish" (infinitive for verbs, singular for nouns), not a random conjugation.
 - Produce 6-10 short, natural example sentences a learner would plausibly say or hear in this topic, using only vocabulary a beginner-to-intermediate learner would already know plus the words you just listed.
-- Keep sentences simple (present tense, everyday phrasing) unless the topic itself implies otherwise.
+- PRESENT TENSE ONLY, no exceptions — the learner isn't ready for past tense yet. Never use pretérito or imperfecto conjugations, even if the topic's name suggests a past-tense framing; keep sentences simple and everyday, present tense throughout.
 - Do not list the same word twice under different endings.
-- "partOfSpeech" is a short label such as "noun", "verb", "adjective", or "phrase".`;
+- "partOfSpeech" is a short label such as "noun", "verb", "adjective", or "phrase".
+- The learner may also give additional instructions about what kinds of words/sentences they want (a register, a subtopic to focus on or avoid, a specific set of verbs, etc.) — follow those on top of the guidelines above rather than instead of them.`;
 
-export async function generateBank(topicName: string): Promise<BankBuilderResult> {
+export async function generateBank(topicName: string, instructions?: string): Promise<BankBuilderResult> {
+  const prompt = instructions
+    ? `Topic: ${topicName}\n\nAdditional instructions from the learner: ${instructions}`
+    : `Topic: ${topicName}`;
   return callStructured({
     systemInstruction: SYSTEM_INSTRUCTION,
-    prompt: `Topic: ${topicName}`,
+    prompt,
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: BankBuilderResultSchema,
   });

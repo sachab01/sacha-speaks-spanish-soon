@@ -1,11 +1,12 @@
-import { and, asc, desc, eq, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 
 import { ConflictError, NotFoundError } from "../errors";
-import { ratingFromPronunciation, ratingFromTranslationCloseness, reviewSrsCard } from "../fsrs";
+import { applyMasteryDelta, ratingFromPronunciation, ratingFromWordVerdict, reviewSrsCard } from "../fsrs";
 import { gradePronunciation } from "../gemini/agents/pronunciationCoach";
 import { generatePracticeSentence } from "../gemini/agents/sentenceGenerator";
-import { gradeTranslation, type TranslationDirection, type TranslationGradeResult } from "../gemini/agents/translationGrader";
+import { gradeTranslation, hadMistakes, type TranslationDirection, type WordVerdict } from "../gemini/agents/translationGrader";
 import { findUncoveredTokens } from "../gemini/vocab";
+import { alignTranscriptToExpected } from "../wordDiff";
 import { db } from "./client";
 import { exerciseAttempts, srsState, topicVocab, vocabItems } from "./schema";
 
@@ -14,21 +15,54 @@ export type ExerciseType = (typeof EXERCISE_TYPES)[number];
 
 const RECENT_SENTENCE_LIMIT = 3;
 
-/** A topic's own vocabulary (via its topicVocab links). */
-export async function getCoveredVocab(topicId: number) {
+/** The shared, always-available glue vocabulary (see lib/db/coreVocab.ts) — not owned by any topic. */
+async function getCoreVocab() {
   return db
     .select({ spanish: vocabItems.spanish, english: vocabItems.english })
-    .from(topicVocab)
-    .innerJoin(vocabItems, eq(vocabItems.id, topicVocab.vocabItemId))
-    .where(eq(topicVocab.topicId, topicId));
+    .from(vocabItems)
+    .where(eq(vocabItems.source, "core_vocab"));
 }
 
-/** Every vocab item globally — the whitelist for Mixed Review's cross-topic sentences. */
+/** A topic's own vocabulary (via its topicVocab links), plus the shared core vocabulary. */
+export async function getCoveredVocab(topicId: number) {
+  const [topicRows, coreRows] = await Promise.all([
+    db
+      .select({ spanish: vocabItems.spanish, english: vocabItems.english })
+      .from(topicVocab)
+      .innerJoin(vocabItems, eq(vocabItems.id, topicVocab.vocabItemId))
+      // Numbers are excluded here so they don't get pulled in as filler for
+      // other topics' sentences — they're only usable as sentence content in
+      // Mixed Review (getAllCoveredVocab, below), and never sentence-wrapped
+      // at all when a number is itself the focus item (see buildAttemptForDueItem).
+      .where(and(eq(topicVocab.topicId, topicId), or(isNull(vocabItems.partOfSpeech), ne(vocabItems.partOfSpeech, "number")))),
+    getCoreVocab(),
+  ]);
+
+  const bySpanish = new Map(topicRows.map((r) => [r.spanish.toLowerCase(), r]));
+  for (const row of coreRows) {
+    if (!bySpanish.has(row.spanish.toLowerCase())) bySpanish.set(row.spanish.toLowerCase(), row);
+  }
+  return Array.from(bySpanish.values());
+}
+
+/** Every vocab item globally (already includes core vocabulary) — the whitelist for Mixed Review's cross-topic sentences. */
 export async function getAllCoveredVocab() {
   return db.select({ spanish: vocabItems.spanish, english: vocabItems.english }).from(vocabItems);
 }
 
-type DueItem = { vocabItemId: number; spanish: string; english: string };
+/** Per-word mastery for one exercise type, for ranking which covered words the learner is weakest on. */
+async function getMasteryScoresByExerciseType(exerciseType: ExerciseType): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ spanish: vocabItems.spanish, masteryScore: srsState.masteryScore })
+    .from(srsState)
+    .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
+    .where(eq(srsState.exerciseType, exerciseType));
+  return new Map(rows.map((r) => [r.spanish.toLowerCase(), r.masteryScore]));
+}
+
+const PREFERRED_WORD_COUNT = 5;
+
+type DueItem = { vocabItemId: number; spanish: string; english: string; partOfSpeech: string | null };
 
 /**
  * How to pick the next item within a practice queue:
@@ -47,7 +81,18 @@ function focusOrderBy(focus: PracticeFocus): SQL[] {
       return [asc(sql`coalesce(${srsState.lastReviewAt}, to_timestamp(0))`), asc(srsState.dueAt)];
     case "due":
     default:
-      return [asc(srsState.dueAt)];
+      return [
+        // Prioritize items actively being relearned after a recent lapse —
+        // otherwise a just-failed word's short relearning interval still sorts
+        // behind an entire backlog of far-older "new"/"review" due dates
+        // (all seeded at roughly bank-creation time) and effectively never
+        // resurfaces. A never-reviewed ("new") item has no genuine due-date
+        // urgency yet — its "due" timestamp is just its creation time — so
+        // order those randomly instead of by insertion sequence, rather than
+        // always drilling a fresh topic in the same fixed order.
+        sql`(case ${srsState.state} when 'learning' then 0 when 'relearning' then 0 when 'review' then 1 else 2 end)`,
+        sql`case when ${srsState.state} = 'new' then random() else extract(epoch from ${srsState.dueAt}) end`,
+      ];
   }
 }
 
@@ -67,31 +112,62 @@ async function buildAttemptForDueItem(params: {
   const { exerciseType, topicId, dueRow, coveredVocab } = params;
   const focusItem = { spanish: dueRow.spanish, english: dueRow.english };
 
-  const recentAttempts = await db
-    .select({ generatedSpanish: exerciseAttempts.generatedSpanish })
-    .from(exerciseAttempts)
-    .where(and(eq(exerciseAttempts.vocabItemId, dueRow.vocabItemId), eq(exerciseAttempts.status, "graded")))
-    .orderBy(desc(exerciseAttempts.createdAt))
-    .limit(RECENT_SENTENCE_LIMIT);
+  let sentence: { spanish: string; english: string; wordsUsed: string[] } | null = null;
 
-  let sentence = await generatePracticeSentence({
-    focusItem,
-    coveredVocab,
-    recentSentences: recentAttempts.map((a) => a.generatedSpanish),
-  });
+  if (dueRow.partOfSpeech === "number") {
+    // Numbers are drilled directly, never wrapped in a generated sentence —
+    // they're still fair game as filler *within* other words' sentences during
+    // Mixed Review (see getAllCoveredVocab), just never the thing being
+    // sentence-built around.
+    sentence = { spanish: focusItem.spanish, english: focusItem.english, wordsUsed: [focusItem.spanish] };
+  } else {
+    const [recentAttempts, masteryByWord] = await Promise.all([
+      db
+        .select({ generatedSpanish: exerciseAttempts.generatedSpanish })
+        .from(exerciseAttempts)
+        .where(and(eq(exerciseAttempts.vocabItemId, dueRow.vocabItemId), eq(exerciseAttempts.status, "graded")))
+        .orderBy(desc(exerciseAttempts.createdAt))
+        .limit(RECENT_SENTENCE_LIMIT),
+      getMasteryScoresByExerciseType(exerciseType),
+    ]);
 
-  if (findUncoveredTokens(sentence.spanish, coveredVocab).length > 0) {
+    // Bias the sentence generator's *filler* word choice (not the mandatory focus
+    // word, which is already the weakest-due item) toward whichever other covered
+    // words the learner currently knows least well.
+    const preferredWords = coveredVocab
+      .filter((w) => w.spanish.toLowerCase() !== focusItem.spanish.toLowerCase())
+      .slice()
+      .sort((a, b) => (masteryByWord.get(a.spanish.toLowerCase()) ?? 50) - (masteryByWord.get(b.spanish.toLowerCase()) ?? 50))
+      .slice(0, PREFERRED_WORD_COUNT);
+
     try {
-      const retry = await generatePracticeSentence({
+      sentence = await generatePracticeSentence({
         focusItem,
         coveredVocab,
-        recentSentences: [...recentAttempts.map((a) => a.generatedSpanish), sentence.spanish],
+        preferredWords,
+        recentSentences: recentAttempts.map((a) => a.generatedSpanish),
       });
-      sentence = findUncoveredTokens(retry.spanish, coveredVocab).length > 0
-        ? { spanish: focusItem.spanish, english: focusItem.english, wordsUsed: [focusItem.spanish] }
-        : retry;
     } catch {
-      sentence = { spanish: focusItem.spanish, english: focusItem.english, wordsUsed: [focusItem.spanish] };
+      sentence = null;
+    }
+
+    if (!sentence || findUncoveredTokens(sentence.spanish, coveredVocab).length > 0) {
+      const avoidList = sentence
+        ? [...recentAttempts.map((a) => a.generatedSpanish), sentence.spanish]
+        : recentAttempts.map((a) => a.generatedSpanish);
+      try {
+        // Accept this retry's sentence even if the heuristic still flags a token —
+        // findUncoveredTokens doesn't lemmatize, so it can misfire on inflected
+        // forms of genuinely-covered words. A full sentence with a possible minor
+        // false positive is far better UX than collapsing to a bare single word.
+        sentence = await generatePracticeSentence({ focusItem, coveredVocab, preferredWords, recentSentences: avoidList });
+      } catch {
+        // Real generation failure on both attempts (not just the heuristic check) —
+        // only now fall back to a bare single-word prompt, as a genuine last resort.
+        if (!sentence) {
+          sentence = { spanish: focusItem.spanish, english: focusItem.english, wordsUsed: [focusItem.spanish] };
+        }
+      }
     }
   }
 
@@ -127,6 +203,7 @@ export async function getNextPracticeItem(
       vocabItemId: vocabItems.id,
       spanish: vocabItems.spanish,
       english: vocabItems.english,
+      partOfSpeech: vocabItems.partOfSpeech,
     })
     .from(srsState)
     .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
@@ -153,10 +230,11 @@ export async function getNextMixedPracticeItem(exerciseType: ExerciseType, focus
       vocabItemId: vocabItems.id,
       spanish: vocabItems.spanish,
       english: vocabItems.english,
+      partOfSpeech: vocabItems.partOfSpeech,
     })
     .from(srsState)
     .innerJoin(vocabItems, eq(srsState.vocabItemId, vocabItems.id))
-    .where(eq(srsState.exerciseType, exerciseType))
+    .where(and(eq(srsState.exerciseType, exerciseType), ne(vocabItems.source, "core_vocab")))
     .orderBy(...focusOrderBy(focus))
     .limit(1);
 
@@ -182,8 +260,45 @@ async function applyReview(vocabItemId: number, exerciseType: ExerciseType, rati
     .where(and(eq(srsState.vocabItemId, vocabItemId), eq(srsState.exerciseType, exerciseType)));
 
   const { card, isCorrect } = reviewSrsCard(srsRow, rating);
-  await db.update(srsState).set(card).where(eq(srsState.id, srsRow.id));
+  const masteryScore = applyMasteryDelta(srsRow.masteryScore, rating);
+  await db.update(srsState).set({ ...card, masteryScore }).where(eq(srsState.id, srsRow.id));
   return isCorrect;
+}
+
+/**
+ * Normalizes for matching a grader-echoed vocab word back to its stored vocabItem —
+ * the model doesn't always reproduce trailing punctuation exactly (e.g. echoing
+ * "No entiendo" for a stored "No entiendo."), so comparison ignores punctuation
+ * and whitespace differences. Accents are kept, since they distinguish real words
+ * (e.g. "el"/"él", "tu"/"tú").
+ */
+function normalizeForVocabMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[¿?¡!.,;:"'()«»]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Lookup of vocabItem ids by Spanish spelling (punctuation/whitespace-insensitive) — resolves a grader's echoed-back vocab words to real ids. */
+async function resolveVocabItemIds(spanishForms: string[]): Promise<Map<string, number>> {
+  if (spanishForms.length === 0) return new Map();
+
+  const punctPattern = String.raw`[¿?¡!.,;:'"()«»]`;
+  // A literal backslash (e.g. in '\s+') doesn't survive being passed as a bound
+  // parameter through the Neon HTTP driver — it arrives stripped, silently
+  // turning "\s+" into "s+" and corrupting any word containing a letter 's'.
+  // The POSIX bracket class below needs no backslash, so it's safe to bind.
+  const wsPattern = "[[:space:]]+";
+  const conditions = spanishForms.map(
+    (s) => sql`lower(regexp_replace(regexp_replace(${vocabItems.spanish}, ${punctPattern}, '', 'g'), ${wsPattern}, ' ', 'g')) = ${normalizeForVocabMatch(s)}`,
+  );
+  const rows = await db
+    .select({ id: vocabItems.id, spanish: vocabItems.spanish })
+    .from(vocabItems)
+    .where(or(...conditions));
+
+  return new Map(rows.map((r) => [normalizeForVocabMatch(r.spanish), r.id]));
 }
 
 /** Strips accents, case, and punctuation so a verbatim (if imperfect) match can skip the Gemini call. */
@@ -207,35 +322,116 @@ export async function submitTranslationAttempt(params: {
   const attempt = await loadPendingAttempt(attemptId);
 
   const expected = direction === "en_to_es" ? attempt.generatedSpanish : attempt.generatedEnglish;
+  const wordsUsed = attempt.wordsUsed;
 
-  // A verbatim match (modulo accents/case/punctuation) is unambiguously correct —
-  // skip the Gemini call entirely. Anything else needs Gemini's judgment, since a
-  // real translation can be a valid synonym/rephrasing that never matches exactly.
-  const grade: TranslationGradeResult =
-    normalizeForExactMatch(userAnswerText) === normalizeForExactMatch(expected)
-      ? { closeness: "exact", feedback: "Correct!" }
-      : await gradeTranslation({ expected, userAnswer: userAnswerText, direction });
+  // A blank answer or a verbatim match (modulo accents/case/punctuation) is
+  // unambiguously gradable without the model's judgment — skip the grader call
+  // entirely for either. Anything else needs real judgment, since a genuine
+  // translation can be a valid synonym/rephrasing that never matches exactly.
+  let words: WordVerdict[];
+  let feedback: string;
+  // Only set when the grader model was actually called — the fast paths below
+  // are deterministic and involve no model, so there's nothing to report.
+  let gradedBy: "gemini" | "mistral" | undefined;
+  let graderWarning: string | null | undefined;
+  if (userAnswerText.trim() === "") {
+    words = wordsUsed.map((vocabWord) => ({
+      vocabWord,
+      sentenceText: vocabWord,
+      userSaid: null,
+      verdict: "missing" as const,
+      note: null,
+      minorMistake: false,
+    }));
+    feedback = "You didn't write anything — here's the correct answer.";
+  } else if (normalizeForExactMatch(userAnswerText) === normalizeForExactMatch(expected)) {
+    words = wordsUsed.map((vocabWord) => ({
+      vocabWord,
+      sentenceText: vocabWord,
+      userSaid: vocabWord,
+      verdict: "correct" as const,
+      note: null,
+      minorMistake: false,
+    }));
+    feedback = "Correct!";
+  } else {
+    const grade = await gradeTranslation({ expected, userAnswer: userAnswerText, direction, wordsUsed });
+    gradedBy = grade.gradedBy;
+    graderWarning = grade.graderWarning;
+    // The grader doesn't reliably follow the "accents/capitalization/punctuation
+    // never count as wrong" instruction on its own (verified live — it slips some
+    // of the time, including inventing a "missing" verdict for a bare punctuation
+    // mark with no letters at all), so enforce it deterministically here rather
+    // than trust it.
+    words = grade.words.map((word) => {
+      if (word.verdict === "correct") return word;
+      if (word.sentenceText.length > 0 && normalizeForExactMatch(word.sentenceText).length === 0) {
+        // Real content, but nothing except punctuation/whitespace — can't be a
+        // real error either way. (An EMPTY sentenceText, in contrast, means the
+        // model just didn't provide one — that's not the same as "just
+        // punctuation" and must not silently erase a real verdict.)
+        return { ...word, verdict: "correct" as const, note: null };
+      }
+      if (word.userSaid !== null && normalizeForExactMatch(word.userSaid) === normalizeForExactMatch(word.sentenceText)) {
+        return { ...word, verdict: "correct" as const, note: null };
+      }
+      return word;
+    });
+    feedback = grade.feedback;
+  }
 
-  const rating = ratingFromTranslationCloseness(grade.closeness);
-  const isCorrect = await applyReview(attempt.vocabItemId, attempt.exerciseType as ExerciseType, rating);
+  // Every vocab word the sentence actually used gets its own FSRS review, not just
+  // the focus item — otherwise a mistake on a filler word wrongly drags down the
+  // focus word's schedule, and correctly using a filler/core word never improves
+  // that word's own progress. "acceptable" (synonym used instead) is skipped: it
+  // proves the translation works, but nothing about knowledge of that specific word.
+  // Words with no vocabWord (ordinary grammar/glue graded for feedback only, not
+  // one of the tracked vocab words) have nothing to resolve/review here.
+  const trackedWords = words.filter((w): w is WordVerdict & { vocabWord: string } => w.vocabWord !== null);
+  const idByWord = await resolveVocabItemIds(trackedWords.map((w) => w.vocabWord));
+  const exerciseType = attempt.exerciseType as ExerciseType;
+  let focusRating: Parameters<typeof reviewSrsCard>[1] | null = null;
+  for (const word of trackedWords) {
+    if (word.verdict === "acceptable") continue;
+    const vocabItemId = idByWord.get(normalizeForVocabMatch(word.vocabWord));
+    if (!vocabItemId) continue;
+    const rating = ratingFromWordVerdict(word.verdict);
+    await applyReview(vocabItemId, exerciseType, rating);
+    if (vocabItemId === attempt.vocabItemId) focusRating = rating;
+  }
+
+  // The grader can decompose a multi-word focus item (e.g. a stored example
+  // sentence used whole, as sentenceGenerator's own fallback path does) into
+  // finer sub-word verdicts that don't literally match its vocabItem string —
+  // in which case it's never resolved/reviewed by the loop above. Every
+  // attempt must still review its focus item, so guarantee it here.
+  const correct = !hadMistakes(words);
+  if (focusRating === null) {
+    focusRating = correct ? "easy" : "again";
+    await applyReview(attempt.vocabItemId, exerciseType, focusRating);
+  }
+  const fsrsRating = focusRating;
 
   await db
     .update(exerciseAttempts)
     .set({
       status: "graded",
       userAnswerText,
-      isCorrect,
-      feedbackEn: grade.feedback,
-      fsrsRating: rating,
+      isCorrect: correct,
+      feedbackEn: feedback,
+      fsrsRating,
       gradedAt: new Date(),
     })
     .where(eq(exerciseAttempts.id, attemptId));
 
   return {
-    correct: isCorrect,
-    feedbackEn: grade.feedback,
+    correct,
+    feedbackEn: feedback,
+    words,
     correctAnswerEs: attempt.generatedSpanish,
     correctAnswerEn: attempt.generatedEnglish,
+    gradedBy,
+    graderWarning,
   };
 }
 
@@ -247,6 +443,7 @@ export async function submitSpeakingAttempt(params: { attemptId: string; audioBy
   const result = await gradePronunciation({ expectedEs: attempt.generatedSpanish, audioBytes, mimeType });
   const rating = ratingFromPronunciation(result);
   const isCorrect = await applyReview(attempt.vocabItemId, attempt.exerciseType as ExerciseType, rating);
+  const words = result.transcript ? alignTranscriptToExpected(result.transcript, attempt.generatedSpanish) : [];
 
   await db
     .update(exerciseAttempts)
@@ -264,6 +461,7 @@ export async function submitSpeakingAttempt(params: { attemptId: string; audioBy
   return {
     correct: isCorrect,
     feedbackEn: result.feedbackEnglish,
+    words,
     correctAnswerEs: attempt.generatedSpanish,
     transcript: result.transcript,
     pronunciationScore: result.pronunciationScore,

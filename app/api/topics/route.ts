@@ -5,6 +5,7 @@ import { createTopic, listTopics } from "@/lib/db/topics";
 
 const CreateTopicSchema = z.object({
   name: z.string().trim().min(1, "Topic name is required").max(200, "Topic name is too long"),
+  instructions: z.string().trim().max(1000, "Instructions are too long").optional(),
 });
 
 export async function GET() {
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await createTopic(parsed.data.name);
+    const result = await createTopic(parsed.data.name, parsed.data.instructions || undefined);
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     console.error("Failed to create topic:", error);

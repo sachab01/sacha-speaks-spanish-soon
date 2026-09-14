@@ -1,21 +1,28 @@
 import { eq } from "drizzle-orm";
 
-import { computeRetrievability, type SrsCardState } from "../fsrs";
+import type { SrsCardState } from "../fsrs";
 import { db } from "./client";
 import { EXERCISE_TYPES, type ExerciseType } from "./practice";
 import { srsState, topicVocab, vocabItems } from "./schema";
+
+/** A mastery score of 50 alone can't tell "never practiced" from "practiced and landed at 50" — `practiced` disambiguates. */
+export type SkillCell = { score: number; practiced: boolean };
 
 export type WordSkill = {
   vocabItemId: number;
   spanish: string;
   english: string;
   itemType: "word" | "sentence";
-  skill: Record<ExerciseType, number>;
+  skill: Record<ExerciseType, SkillCell>;
   average: number;
+  /** Never graded in any exercise type yet. */
+  isNew: boolean;
 };
 
 export type SkillSummary = {
+  /** Vocab items only (itemType "word") — sentences are counted separately, not blended in. */
   wordCount: number;
+  sentenceCount: number;
   averageSkill: Record<ExerciseType, number>;
   newCount: number;
 };
@@ -25,14 +32,19 @@ function summarize(words: WordSkill[]): SkillSummary {
   let newCount = 0;
 
   for (const exerciseType of EXERCISE_TYPES) {
-    const total = words.reduce((sum, w) => sum + w.skill[exerciseType], 0);
+    const total = words.reduce((sum, w) => sum + w.skill[exerciseType].score, 0);
     averageSkill[exerciseType] = words.length > 0 ? Math.round(total / words.length) : 0;
   }
   for (const word of words) {
-    if (EXERCISE_TYPES.every((type) => word.skill[type] === 0)) newCount += 1;
+    if (word.isNew) newCount += 1;
   }
 
-  return { wordCount: words.length, averageSkill, newCount };
+  return {
+    wordCount: words.filter((w) => w.itemType === "word").length,
+    sentenceCount: words.filter((w) => w.itemType === "sentence").length,
+    averageSkill,
+    newCount,
+  };
 }
 
 function buildWordSkills(
@@ -42,13 +54,11 @@ function buildWordSkills(
     english: string;
     itemType: "word" | "sentence";
     exerciseType: ExerciseType;
+    masteryScore: number;
     state: SrsCardState;
-    stability: number;
-    lastReviewAt: Date | null;
   }[],
 ): WordSkill[] {
   const byItem = new Map<number, WordSkill>();
-  const now = new Date();
 
   for (const row of rows) {
     let entry = byItem.get(row.vocabItemId);
@@ -58,22 +68,25 @@ function buildWordSkills(
         spanish: row.spanish,
         english: row.english,
         itemType: row.itemType,
-        skill: { writing: 0, speaking: 0, listening: 0 },
+        skill: {
+          writing: { score: 50, practiced: false },
+          speaking: { score: 50, practiced: false },
+          listening: { score: 50, practiced: false },
+        },
         average: 0,
+        isNew: false,
       };
       byItem.set(row.vocabItemId, entry);
     }
-    entry.skill[row.exerciseType] = computeRetrievability(
-      { state: row.state, stability: row.stability, lastReviewAt: row.lastReviewAt },
-      now,
-    );
+    entry.skill[row.exerciseType] = { score: row.masteryScore, practiced: row.state !== "new" };
   }
 
   const words = Array.from(byItem.values());
   for (const word of words) {
     word.average = Math.round(
-      (word.skill.writing + word.skill.speaking + word.skill.listening) / EXERCISE_TYPES.length,
+      (word.skill.writing.score + word.skill.speaking.score + word.skill.listening.score) / EXERCISE_TYPES.length,
     );
+    word.isNew = EXERCISE_TYPES.every((type) => !word.skill[type].practiced);
   }
   // Weakest first, so the words most worth reviewing are immediately visible.
   words.sort((a, b) => a.average - b.average);
@@ -88,9 +101,8 @@ export async function getTopicSkillOverview(topicId: number) {
       english: vocabItems.english,
       itemType: vocabItems.itemType,
       exerciseType: srsState.exerciseType,
+      masteryScore: srsState.masteryScore,
       state: srsState.state,
-      stability: srsState.stability,
-      lastReviewAt: srsState.lastReviewAt,
     })
     .from(topicVocab)
     .innerJoin(vocabItems, eq(vocabItems.id, topicVocab.vocabItemId))
@@ -109,9 +121,8 @@ export async function getOverallSkillOverview() {
       english: vocabItems.english,
       itemType: vocabItems.itemType,
       exerciseType: srsState.exerciseType,
+      masteryScore: srsState.masteryScore,
       state: srsState.state,
-      stability: srsState.stability,
-      lastReviewAt: srsState.lastReviewAt,
     })
     .from(vocabItems)
     .innerJoin(srsState, eq(srsState.vocabItemId, vocabItems.id));

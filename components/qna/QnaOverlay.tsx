@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
+import { CloseIcon, MessageIcon, MicIcon } from "@/components/ui/icons";
 import { useMicRecorder } from "@/hooks/useMicRecorder";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 
@@ -34,7 +35,6 @@ export function QnaOverlay({ qnaUrl, attemptId }: { qnaUrl: string; attemptId: s
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Failed to get an answer");
       setAnswer(data);
-      speak(data.answerText, "en-US");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -69,25 +69,35 @@ export function QnaOverlay({ qnaUrl, attemptId }: { qnaUrl: string; attemptId: s
   if (!attemptId) return null;
 
   return (
-    <div className="fixed right-4 bottom-4 z-10">
+    <div className="qna-overlay fixed right-4 bottom-4 z-10">
       {isOpen ? (
-        <div className="flex w-80 flex-col gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+        <div className="flex w-80 flex-col gap-3 rounded-lg border border-accent-200 bg-[var(--background)] p-4 shadow-lg dark:border-accent-900">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Ask a question</p>
+            <p className="text-sm font-bold text-accent-600 dark:text-accent-400">Ask a question</p>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100"
+              className="text-accent-500 hover:text-accent-700 dark:hover:text-accent-300"
             >
-              ✕
+              <CloseIcon className="h-4 w-4" />
             </button>
           </div>
 
           {answer && (
-            <div className="flex flex-col gap-1 rounded-md bg-neutral-50 p-3 text-sm dark:bg-neutral-800">
-              <p>{answer.answerText}</p>
+            <div className="flex flex-col gap-1 rounded-md bg-accent-50 p-3 text-sm font-bold text-accent-700 dark:bg-accent-950/30 dark:text-accent-300">
+              <p className="flex items-start gap-2">
+                <span>{answer.answerText}</span>
+                <button
+                  type="button"
+                  onClick={() => speak(answer.answerText, "en-US")}
+                  aria-label="Listen to the answer"
+                  className="shrink-0 text-accent-500 hover:text-accent-700 dark:hover:text-accent-300"
+                >
+                  🔊
+                </button>
+              </p>
               {!answer.onTopic && (
-                <p className="text-xs text-neutral-500">Let&rsquo;s get back to the exercise!</p>
+                <p className="text-xs font-bold text-accent-500">Let&rsquo;s get back to the exercise!</p>
               )}
               {answer.newVocabAdded.length > 0 && (
                 <p className="text-xs text-green-600">
@@ -104,13 +114,13 @@ export function QnaOverlay({ qnaUrl, attemptId }: { qnaUrl: string; attemptId: s
               onChange={(event) => setQuestionText(event.target.value)}
               placeholder="Type a question…"
               disabled={isSubmitting}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              className="w-full rounded-full border border-accent-300 px-4 py-2 text-sm font-bold text-accent-600 outline-accent-500 focus:border-accent-500 dark:border-accent-800"
             />
             <div className="flex gap-2">
               <button
                 type="submit"
                 disabled={isSubmitting || !questionText.trim()}
-                className="flex-1 rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                className="flex-1 rounded-full bg-accent-600 px-3 py-1.5 text-sm font-bold text-[var(--background)] transition-colors hover:bg-accent-700 disabled:opacity-50"
               >
                 {isSubmitting ? "Asking…" : "Ask"}
               </button>
@@ -120,23 +130,24 @@ export function QnaOverlay({ qnaUrl, attemptId }: { qnaUrl: string; attemptId: s
                 disabled={isSubmitting}
                 className={
                   isRecording
-                    ? "rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white"
-                    : "rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+                    ? "rounded-full bg-red-600 px-3 py-1.5 text-sm font-bold text-[var(--background)]"
+                    : "rounded-full bg-accent-600 px-3 py-1.5 text-sm font-bold text-[var(--background)] hover:bg-accent-700"
                 }
               >
-                {isRecording ? "Stop" : "🎤"}
+                {isRecording ? "Stop" : <MicIcon className="mx-auto h-4 w-4" />}
               </button>
             </div>
           </form>
-          {(error || micError) && <p className="text-xs text-red-600">{error ?? micError}</p>}
+          {(error || micError) && <p className="text-xs font-bold text-red-600">{error ?? micError}</p>}
         </div>
       ) : (
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="rounded-full bg-neutral-900 px-4 py-3 text-sm font-medium text-white shadow-lg dark:bg-neutral-100 dark:text-neutral-900"
+          className="flex items-center gap-2 rounded-full bg-accent-600 px-4 py-3 text-sm font-bold text-[var(--background)] shadow-lg transition-colors hover:bg-accent-700"
         >
-          ? Ask
+          <MessageIcon className="h-4 w-4" />
+          Ask
         </button>
       )}
     </div>

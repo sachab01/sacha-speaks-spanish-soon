@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { FocusSelector } from "@/components/practice/FocusSelector";
-import { ListeningExercise } from "@/components/practice/ListeningExercise";
-import { SpeakingExercise } from "@/components/practice/SpeakingExercise";
-import { WritingExercise } from "@/components/practice/WritingExercise";
+import { MixedPracticeSessionPanel } from "@/components/practice/MixedPracticeSessionPanel";
+import { PRACTICE_MODE_STYLES } from "@/components/practice/practiceCardStyles";
 import { PRACTICE_FOCUSES, parsePracticeMode, type PracticeFocus } from "@/lib/api-utils";
+import { getTopicWithBank, listTopics } from "@/lib/db/topics";
+import type { TopicItemInfo } from "@/lib/practiceStats";
 
 export default async function MixedPracticePage({
   params,
@@ -24,23 +24,45 @@ export default async function MixedPracticePage({
     ? (focusParam as PracticeFocus)
     : "due";
 
-  const scope = { mixed: true as const };
   const basePath = `/practice/mixed/${mode}`;
 
+  const topics = await listTopics();
+  const topicBanks = await Promise.all(topics.map((topic) => getTopicWithBank(topic.id)));
+  const itemInfoByText: Record<string, TopicItemInfo> = {};
+  for (const bank of topicBanks) {
+    if (!bank) continue;
+    for (const item of bank.bankItems) {
+      itemInfoByText[item.spanish.trim().toLowerCase()] = { topicId: bank.topic.id, itemType: item.itemType };
+    }
+  }
+
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-12">
+    <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-6 px-6 py-10 md:px-12">
       <div>
-        <Link href="/" className="text-sm text-neutral-500 hover:underline">
+        <Link href="/" className="text-sm font-bold text-accent-600 hover:text-accent-700 dark:text-accent-400">
           ← All topics
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold capitalize">Mixed Review — {mode} practice</h1>
+        <h1 className="font-display mt-2 text-3xl font-bold capitalize text-accent-600 dark:text-accent-400">
+          Mixed Review — {mode} practice
+        </h1>
       </div>
 
-      <FocusSelector basePath={basePath} current={focus} />
-
-      {mode === "writing" && <WritingExercise scope={scope} focus={focus} />}
-      {mode === "speaking" && <SpeakingExercise scope={scope} focus={focus} />}
-      {mode === "listening" && <ListeningExercise scope={scope} focus={focus} />}
+      <div
+        className={`w-full max-w-2xl rounded-lg p-6 sm:p-8 ${PRACTICE_MODE_STYLES[mode].bg} ${PRACTICE_MODE_STYLES[mode].text} ${PRACTICE_MODE_STYLES[mode].overrides}`}
+      >
+        <MixedPracticeSessionPanel
+          mode={mode}
+          focus={focus}
+          basePath={basePath}
+          topics={topics.map((topic) => ({
+            id: topic.id,
+            name: topic.name,
+            wordCount: topic.wordCount,
+            sentenceCount: topic.sentenceCount,
+          }))}
+          itemInfoByText={itemInfoByText}
+        />
+      </div>
     </main>
   );
 }

@@ -1,27 +1,25 @@
-import Link from "next/link";
+import { Dropdown } from "@/components/ui/Dropdown";
 
 const FOCUS_OPTIONS = [
-  { value: "due", label: "Due" },
-  { value: "weakest", label: "Weakest words" },
-  { value: "stale", label: "Not reviewed in a while" },
+  { value: "due", label: "Due", description: "Words scheduled for review right now" },
+  { value: "weakest", label: "Weakest words", description: "Lowest recall estimates first" },
+  { value: "stale", label: "Not reviewed in a while", description: "Longest since last practice" },
 ] as const;
 
-export function FocusSelector({ basePath, current }: { basePath: string; current: string }) {
-  return (
-    <div className="flex flex-wrap gap-2 text-sm">
-      {FOCUS_OPTIONS.map((option) => (
-        <Link
-          key={option.value}
-          href={option.value === "due" ? basePath : `${basePath}?focus=${option.value}`}
-          className={
-            current === option.value
-              ? "rounded-md bg-neutral-900 px-3 py-1.5 text-white dark:bg-neutral-100 dark:text-neutral-900"
-              : "rounded-md border border-neutral-300 px-3 py-1.5 hover:border-neutral-500 dark:border-neutral-700"
-          }
-        >
-          {option.label}
-        </Link>
-      ))}
-    </div>
-  );
+export function FocusSelector({
+  basePath,
+  current,
+  inverted = false,
+}: {
+  basePath: string;
+  current: string;
+  /** Use light (current-color) trigger styling for placement on a solid accent-colored surface. */
+  inverted?: boolean;
+}) {
+  const options = FOCUS_OPTIONS.map((option) => ({
+    ...option,
+    href: option.value === "due" ? basePath : `${basePath}?focus=${option.value}`,
+  }));
+
+  return <Dropdown label="Focus:" options={options} current={current} inverted={inverted} />;
 }

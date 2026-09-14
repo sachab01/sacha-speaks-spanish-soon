@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { FocusSelector } from "@/components/practice/FocusSelector";
-import { ListeningExercise } from "@/components/practice/ListeningExercise";
-import { SpeakingExercise } from "@/components/practice/SpeakingExercise";
-import { WritingExercise } from "@/components/practice/WritingExercise";
+import { PRACTICE_MODE_STYLES } from "@/components/practice/practiceCardStyles";
+import { PracticeSessionPanel } from "@/components/practice/PracticeSessionPanel";
 import { PRACTICE_FOCUSES, parsePracticeMode, type PracticeFocus } from "@/lib/api-utils";
 import { getTopicWithBank } from "@/lib/db/topics";
 
@@ -32,21 +30,40 @@ export default async function PracticePage({
   if (!result) notFound();
 
   const basePath = `/topics/${topicId}/practice/${mode}`;
+  const totalWordCount = result.bankItems.filter((item) => item.itemType === "word").length;
+  const totalSentenceCount = result.bankItems.filter((item) => item.itemType === "sentence").length;
+  const itemTypeByText: Record<string, "word" | "sentence"> = {};
+  for (const item of result.bankItems) {
+    itemTypeByText[item.spanish.trim().toLowerCase()] = item.itemType;
+  }
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-12">
+    <main className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col gap-6 px-6 py-10 md:px-12">
       <div>
-        <Link href={`/topics/${topicId}`} className="text-sm text-neutral-500 hover:underline">
+        <Link
+          href={`/topics/${topicId}`}
+          className="text-sm font-bold text-accent-600 hover:text-accent-700 dark:text-accent-400"
+        >
           ← {result.topic.name}
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold capitalize">{mode} practice</h1>
+        <h1 className="font-display mt-2 text-3xl font-bold capitalize text-accent-600 dark:text-accent-400">
+          {mode} practice
+        </h1>
       </div>
 
-      <FocusSelector basePath={basePath} current={focus} />
-
-      {mode === "writing" && <WritingExercise scope={{ topicId }} focus={focus} />}
-      {mode === "speaking" && <SpeakingExercise scope={{ topicId }} focus={focus} />}
-      {mode === "listening" && <ListeningExercise scope={{ topicId }} focus={focus} />}
+      <div
+        className={`w-full max-w-2xl rounded-lg p-6 sm:p-8 ${PRACTICE_MODE_STYLES[mode].bg} ${PRACTICE_MODE_STYLES[mode].text} ${PRACTICE_MODE_STYLES[mode].overrides}`}
+      >
+        <PracticeSessionPanel
+          scope={{ topicId }}
+          mode={mode}
+          focus={focus}
+          basePath={basePath}
+          totalWordCount={totalWordCount}
+          totalSentenceCount={totalSentenceCount}
+          itemTypeByText={itemTypeByText}
+        />
+      </div>
     </main>
   );
 }

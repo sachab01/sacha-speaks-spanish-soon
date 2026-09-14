@@ -1,6 +1,5 @@
 import { createEmptyCard, fsrs, Rating, State, type Card } from "ts-fsrs";
 
-import type { TranslationGradeResult } from "./gemini/agents/translationGrader";
 import type { PronunciationCoachResult } from "./gemini/agents/pronunciationCoach";
 
 export type FsrsRatingLabel = "again" | "hard" | "good" | "easy";
@@ -89,20 +88,20 @@ export function reviewSrsCard(
 }
 
 /**
- * exact/synonym answers count as an easy recall; a wrong word (but otherwise on-task)
- * still counts as a recall, just a harder one, since the learner engaged with the
- * right concept. Wrong or unattempted answers reset progress via "again".
+ * Rating for a single vocab word's own translation verdict — every word actually
+ * used in a practice sentence is graded and scheduled individually now, not
+ * blended into one sentence-level rating. There's no "hard" tier here: for a
+ * word that was actually reviewed, it's either produced correctly or it isn't.
+ * ("acceptable" verdicts — a valid synonym instead of this specific word — are
+ * deliberately excluded from this function's input; they skip review entirely,
+ * since using a different word proves nothing about knowledge of this one.)
  */
-export function ratingFromTranslationCloseness(closeness: TranslationGradeResult["closeness"]): FsrsRatingLabel {
-  switch (closeness) {
-    case "exact":
+export function ratingFromWordVerdict(verdict: "correct" | "wrong" | "missing"): FsrsRatingLabel {
+  switch (verdict) {
+    case "correct":
       return "easy";
-    case "minor_variation":
-      return "good";
-    case "wrong_word":
-      return "hard";
     case "wrong":
-    case "unattempted":
+    case "missing":
       return "again";
   }
 }
@@ -119,19 +118,21 @@ export function ratingFromPronunciation(result: PronunciationCoachResult): FsrsR
   return "hard";
 }
 
+const MASTERY_DELTA: Record<FsrsRatingLabel, number> = {
+  again: -20,
+  hard: -5,
+  good: 10,
+  easy: 15,
+};
+
 /**
- * "Skill" as a live 0-100 score: FSRS's retrievability — the model's estimate
- * of how likely you are to recall this right now. It rises when you review
- * successfully (interval/stability grow) and decays continuously with time
- * since the last review, which is exactly the "goes up and down" behavior
- * a progress view should show, not just a static mastery label.
+ * "Mastery" is a direct 0-100 meter, intentionally separate from FSRS's own
+ * memory model above: FSRS's retrievability is a forgetting-curve estimate
+ * that resets to ~100% right after *any* review (elapsed time since review
+ * is ~0 regardless of rating), so it can't visibly drop the moment you get
+ * something wrong. Mastery instead only moves on an actual graded attempt,
+ * by a fixed amount per rating, with no time-based decay.
  */
-export function computeRetrievability(
-  card: Pick<SrsCardData, "state" | "stability" | "lastReviewAt">,
-  now: Date = new Date(),
-): number {
-  if (card.state === "new" || !card.lastReviewAt) return 0;
-  const elapsedDays = Math.max(0, (now.getTime() - card.lastReviewAt.getTime()) / (1000 * 60 * 60 * 24));
-  const retrievability = scheduler.forgetting_curve(elapsedDays, card.stability);
-  return Math.round(retrievability * 100);
+export function applyMasteryDelta(current: number, rating: FsrsRatingLabel): number {
+  return Math.max(0, Math.min(100, current + MASTERY_DELTA[rating]));
 }
