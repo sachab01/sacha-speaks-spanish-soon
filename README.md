@@ -5,7 +5,7 @@ A Spanish-practice app: pick a topic, an LLM generates a word/sentence bank for 
 
 > **Status: work in progress.** This is a personal side project I'm actively building and using myself — not a finished product. See [Known limitations](#known-limitations--roadmap) below for what's still missing.
 
-![Home page: create a topic, jump into mixed review, or pick from your topics](docs/screenshots/home.png)
+![Home page: create a topic, jump into mixed review, or pick from an existing topic](docs/screenshots/home.png)
 
 ## What makes this different from flashcards
 
@@ -65,7 +65,7 @@ This is mid-build, not finished. Notably:
 - **No rate limiting or cost guards** around the Gemini/Mistral calls — fine for personal use, not safe to expose publicly as-is.
 - Mobile layout and cross-browser mic/speech-API support haven't been hardened.
 
-Because of the lack of authentication — anyone hitting a public instance could create, practice, or delete topics as if they were you — this repo doesn't link a public live demo. It's meant to be run locally by anyone reviewing the code.
+Because of the lack of authentication — anyone hitting a public instance could create, practice, or delete topics — this repo doesn't link a public live demo. It's meant to be run locally by anyone reviewing the code.
 
 ## License
 
