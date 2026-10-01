@@ -1,8 +1,8 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../client";
-import { FLASH_CHAIN } from "../quota";
+import { callStructuredWithModel } from "../client";
+import { BANK_CHAIN } from "../models";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 
 const BANK_OVERLOAD_WAIT_MS = 5 * 60_000;
@@ -23,6 +23,8 @@ const SentenceBankSchema = z.object({ sentences: z.array(BankSentenceSchema) });
 
 export type BankWord = z.infer<typeof BankWordSchema>;
 export type BankSentence = z.infer<typeof BankSentenceSchema>;
+/** One model response: its sentences, and which model in the chain wrote them. */
+export type BankBatch = { sentences: BankSentence[]; model: string };
 
 const RESPONSE_SCHEMA = {
   type: Type.OBJECT,
@@ -75,6 +77,8 @@ For each sentence, "words" lists every word or fixed expression in it that the l
 
 "english" for the sentence is a natural English translation.
 
+In case you want to use information about the student: Her name is Sacha, she is from Amsterdam, and is 25 years old.
+
 The learner may also give additional instructions (a register, a subtopic to focus on or avoid, specific verbs, etc.) — follow those on top of the rules above.`;
 
 export async function generateSentenceBank(params: {
@@ -82,10 +86,10 @@ export async function generateSentenceBank(params: {
   instructions?: string | null;
   sentenceCount: number;
   existingVocab: CoveredVocabItem[];
-}): Promise<BankSentence[]> {
+}): Promise<BankBatch> {
   const { topicName, instructions, sentenceCount, existingVocab } = params;
 
-  const result = await callStructured({
+  const { data, model } = await callStructuredWithModel({
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt: `Topic: ${topicName}${instructions ? `\n\nAdditional instructions from the learner: ${instructions}` : ""}
 
@@ -95,13 +99,13 @@ The learner's existing vocabulary list:
 ${formatWhitelist(existingVocab)}`,
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: SentenceBankSchema,
-    models: FLASH_CHAIN,
+    models: BANK_CHAIN,
     // Bank building runs rarely and isn't interactive, so it can afford to
     // wait out a per-minute limit, or a few minutes of every model being overloaded.
     maxWaitMs: 70_000,
     overloadWaitMs: BANK_OVERLOAD_WAIT_MS,
   });
-  return result.sentences;
+  return { sentences: data.sentences, model };
 }
 
 /**
@@ -115,10 +119,10 @@ export async function generateTopUpSentences(params: {
   needed: { word: CoveredVocabItem; count: number }[];
   existingSentences: string[];
   existingVocab: CoveredVocabItem[];
-}): Promise<BankSentence[]> {
+}): Promise<BankBatch> {
   const { topicName, instructions, needed, existingSentences, existingVocab } = params;
 
-  const result = await callStructured({
+  const { data, model } = await callStructuredWithModel({
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt: `Topic: ${topicName}${instructions ? `\n\nAdditional instructions from the learner: ${instructions}` : ""}
 
@@ -132,11 +136,11 @@ The learner's existing vocabulary list:
 ${formatWhitelist(existingVocab)}`,
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: SentenceBankSchema,
-    models: FLASH_CHAIN,
+    models: BANK_CHAIN,
     maxWaitMs: 70_000,
     overloadWaitMs: BANK_OVERLOAD_WAIT_MS,
   });
-  return result.sentences;
+  return { sentences: data.sentences, model };
 }
 
 const REVIEW_INSTRUCTION = `You are a native speaker of Mexican Spanish and an experienced Spanish teacher, reviewing a practice sentence bank a colleague wrote for a beginner-to-intermediate learner. The learner will practice ONLY with these sentences, so every mistake or unnatural sentence you let through gets learned.
@@ -147,8 +151,6 @@ Check every sentence:
 3. Is it in the present tense (commands and "voy a + infinitive" are fine)?
 4. Is the English translation accurate and natural?
 If a sentence fails any check, rewrite it into a correct, natural sentence on the same topic that uses the same words where possible — or drop it if it can't be saved. Keep sentences that pass exactly as they are.
-
-In case you want to use iformation about the student: Her name is Sacha, she is from amsterdam, and is 25 years old.
 
 Then check each sentence's "words" list against the final sentence text. It must contain every word or fixed expression the learner needs to know from that sentence — including adverbs (muy, mucho, también…), question words (cómo, dónde, qué…), pronouns and prepositions — in dictionary form (infinitive for verbs, singular for nouns, masculine singular for adjectives), with fixed expressions kept as one entry. Add anything missing, remove entries that no longer appear in the sentence, and remove articles and proper names (people, cities, neighborhoods, brands) entirely. Where an entry is already in the learner's existing vocabulary list, keep exactly that spelling.
 
@@ -163,10 +165,10 @@ export async function reviewSentenceBank(params: {
   topicName: string;
   bank: BankSentence[];
   existingVocab: CoveredVocabItem[];
-}): Promise<BankSentence[]> {
+}): Promise<BankBatch> {
   const { topicName, bank, existingVocab } = params;
 
-  const result = await callStructured({
+  const { data, model } = await callStructuredWithModel({
     systemInstruction: REVIEW_INSTRUCTION,
     prompt: `Topic: ${topicName}
 
@@ -177,9 +179,9 @@ The learner's existing vocabulary list:
 ${formatWhitelist(existingVocab)}`,
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: SentenceBankSchema,
-    models: FLASH_CHAIN,
+    models: BANK_CHAIN,
     maxWaitMs: 70_000,
     overloadWaitMs: BANK_OVERLOAD_WAIT_MS,
   });
-  return result.sentences;
+  return { sentences: data.sentences, model };
 }

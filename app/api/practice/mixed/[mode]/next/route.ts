@@ -17,9 +17,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ mode
     const { attempt, notice } = await getNextMixedPracticeItem(mode, focus, generate);
 
     if (mode === "listening") {
-      return NextResponse.json({ attemptId: attempt.id, promptSpanish: attempt.generatedSpanish, notice });
+      return NextResponse.json({
+        attemptId: attempt.id,
+        promptSpanish: attempt.generatedSpanish,
+        sentenceOrigin: { model: attempt.sentenceModel, reviewModel: attempt.sentenceReviewModel },
+        notice,
+      });
     }
-    return NextResponse.json({ attemptId: attempt.id, promptEnglish: attempt.generatedEnglish, notice });
+    return NextResponse.json({
+      attemptId: attempt.id,
+      promptEnglish: attempt.generatedEnglish,
+      sentenceOrigin: { model: attempt.sentenceModel, reviewModel: attempt.sentenceReviewModel },
+      notice,
+    });
   } catch (error) {
     return errorResponse(error);
   }

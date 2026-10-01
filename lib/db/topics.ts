@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 
 import { generateBank } from "../gemini/agents/bankBuilder";
 import { db } from "./client";
+import type { SentenceOrigin } from "../sentenceSource";
 import { sentences, topicVocab, topics, vocabItems } from "./schema";
 import { findOrCreateVocabItem, linkVocabToTopic } from "./vocab";
 
@@ -64,18 +65,27 @@ export async function getTopicWithBank(topicId: number) {
   // A topic built as a sentence bank stores its sentences separately, not as
   // vocab items — listed alongside so the bank view and session coverage see them.
   const poolSentences = await db
-    .select({ id: sentences.id, spanish: sentences.spanish, english: sentences.english, createdAt: sentences.createdAt })
+    .select({
+      id: sentences.id,
+      spanish: sentences.spanish,
+      english: sentences.english,
+      createdAt: sentences.createdAt,
+      model: sentences.model,
+      reviewModel: sentences.reviewModel,
+    })
     .from(sentences)
     .where(and(eq(sentences.topicId, topicId), eq(sentences.source, "bank_builder")))
     .orderBy(sentences.id);
 
   const bankItems = [
-    ...items,
-    ...poolSentences.map((s) => ({
+    // Legacy items predate model tracking.
+    ...items.map((item) => ({ ...item, sentenceOrigin: { model: null, reviewModel: null } as SentenceOrigin })),
+    ...poolSentences.map(({ model, reviewModel, ...s }) => ({
       ...s,
       itemType: "sentence" as const,
       partOfSpeech: null,
       source: "bank_builder" as const,
+      sentenceOrigin: { model, reviewModel } as SentenceOrigin,
     })),
   ];
   return { topic, bankItems };

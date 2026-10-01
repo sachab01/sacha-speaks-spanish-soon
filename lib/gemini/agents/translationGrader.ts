@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { httpStatusOf, QuotaExhaustedError } from "../../errors";
 import { callStructured as callGemini } from "../client";
-import { LITE_CHAIN } from "../quota";
+import { LITE_CHAIN } from "../models";
 import { callStructured as callMistral } from "../../mistral/client";
 
 const VERDICT_VALUES = ["correct", "acceptable", "wrong", "missing"] as const;

@@ -25,9 +25,17 @@ export async function GET(
     const attempt = await getNextPracticeItem(topicId, mode, focus);
 
     if (mode === "listening") {
-      return NextResponse.json({ attemptId: attempt.id, promptSpanish: attempt.generatedSpanish });
+      return NextResponse.json({
+        attemptId: attempt.id,
+        promptSpanish: attempt.generatedSpanish,
+        sentenceOrigin: { model: attempt.sentenceModel, reviewModel: attempt.sentenceReviewModel },
+      });
     }
-    return NextResponse.json({ attemptId: attempt.id, promptEnglish: attempt.generatedEnglish });
+    return NextResponse.json({
+      attemptId: attempt.id,
+      promptEnglish: attempt.generatedEnglish,
+      sentenceOrigin: { model: attempt.sentenceModel, reviewModel: attempt.sentenceReviewModel },
+    });
   } catch (error) {
     return errorResponse(error);
   }

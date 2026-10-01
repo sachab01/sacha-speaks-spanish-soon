@@ -1,8 +1,8 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
-import { callStructured } from "../client";
-import type { ModelChain } from "../quota";
+import { callStructuredWithModel } from "../client";
+import type { ModelChain } from "../models";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 
 const GeneratedSentenceSchema = z.object({
@@ -66,7 +66,7 @@ export async function generatePracticeSentences(params: {
   recentSentences?: string[];
   models: ModelChain;
   maxWaitMs?: number;
-}): Promise<GeneratedSentence[]> {
+}): Promise<{ sentences: GeneratedSentence[]; model: string }> {
   const { focusItems, coveredVocab, recentSentences = [], models, maxWaitMs } = params;
 
   const avoidBlock = recentSentences.length
@@ -75,7 +75,7 @@ export async function generatePracticeSentences(params: {
         .join("\n")}`
     : "";
 
-  const result = await callStructured({
+  const { data, model } = await callStructuredWithModel({
     systemInstruction: SYSTEM_INSTRUCTION,
     prompt: `Focus words/phrases — write exactly one sentence for each, in this order:
 ${formatWhitelist(focusItems)}
@@ -88,10 +88,13 @@ ${formatWhitelist(coveredVocab)}${avoidBlock}`,
     maxWaitMs,
   });
 
-  return result.sentences.map((s) => ({
-    focusWord: stripMarkdown(s.focusWord),
-    spanish: stripMarkdown(s.spanish),
-    english: stripMarkdown(s.english),
-    wordsUsed: s.wordsUsed.map(stripMarkdown),
-  }));
+  return {
+    model,
+    sentences: data.sentences.map((s) => ({
+      focusWord: stripMarkdown(s.focusWord),
+      spanish: stripMarkdown(s.spanish),
+      english: stripMarkdown(s.english),
+      wordsUsed: s.wordsUsed.map(stripMarkdown),
+    })),
+  };
 }

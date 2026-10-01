@@ -1,5 +1,6 @@
 import { markDailyQuotaUsed, releaseDailyRequest, reserveDailyRequest } from "../db/geminiUsage";
 import { QuotaExhaustedError } from "../errors";
+import type { ModelChain } from "./models";
 
 /**
  * Free-tier limits per model, as shown on this project's AI Studio rate-limit
@@ -14,19 +15,6 @@ const MODEL_LIMITS: Record<string, { rpm: number; rpd: number }> = {
   "gemini-3.5-flash": { rpm: 5, rpd: 20 },
   "gemini-3.5-flash-lite": { rpm: 15, rpd: 500 },
 };
-
-/**
- * The stronger models, tried in order, for the low-frequency calls where
- * quality matters most (building a topic's sentence bank, Mixed Review's
- * batched sentence generation). Each has only 20 requests/day, so the chain
- * gives ~80/day combined.
- */
-export const FLASH_CHAIN = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash"] as const;
-
-/** The high-quota model for per-attempt calls (grading, pronunciation, spoken Q&A). */
-export const LITE_CHAIN = ["gemini-3.5-flash-lite"] as const;
-
-export type ModelChain = readonly string[];
 
 /**
  * Our own per-minute count runs one under Google's limit: Google's window

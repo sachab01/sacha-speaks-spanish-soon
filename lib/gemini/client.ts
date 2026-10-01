@@ -1,8 +1,9 @@
 import { GoogleGenAI, type Schema } from "@google/genai";
 import type { ZodType } from "zod";
 
-import { httpStatusOf } from "../errors";
-import { acquireModel, recordRateLimitError, recordUnavailable, type ModelChain } from "./quota";
+import { httpStatusOf, QuotaExhaustedError } from "../errors";
+import type { ModelChain } from "./models";
+import { acquireModel, recordRateLimitError, recordUnavailable } from "./quota";
 
 const apiKey = process.env.GEMINI_API_KEY;
 
@@ -29,15 +30,38 @@ async function generateWithQuota<R>(
   maxWaitMs: number,
   overloadWaitMs: number,
   send: (model: string) => Promise<R>,
-): Promise<R> {
+): Promise<{ response: R; model: string }> {
   const overloadDeadline = Date.now() + overloadWaitMs;
   let remaining = [...models];
+  let lastOverloadError: unknown = null;
+
+  /** Once every model with quota left has been overloaded: pause and start over, or give up with that error. */
+  async function waitOutOverload() {
+    const delay = Math.min(OVERLOAD_RETRY_DELAY_MS, overloadDeadline - Date.now());
+    if (delay <= 0) throw lastOverloadError;
+    console.warn(`[gemini] every model is overloaded — trying again in ${Math.round(delay / 1000)}s`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    remaining = [...models];
+  }
+
   while (true) {
-    const model = await acquireModel(remaining, maxWaitMs);
+    let model: string;
+    try {
+      model = await acquireModel(remaining, maxWaitMs);
+    } catch (error) {
+      // Out of quota on the models still in play, but others were only
+      // overloaded — those still have quota, so they're worth waiting for.
+      if (error instanceof QuotaExhaustedError && lastOverloadError !== null) {
+        await waitOutOverload();
+        continue;
+      }
+      throw error;
+    }
+
     try {
       const response = await send(model);
       if (model !== models[0]) console.info(`[gemini] served by fallback model ${model}`);
-      return response;
+      return { response, model };
     } catch (error) {
       const status = httpStatusOf(error);
       if (status !== null) console.warn(`[gemini] ${model} failed with ${status}, trying the next option`);
@@ -45,14 +69,9 @@ async function generateWithQuota<R>(
         await recordRateLimitError(model, error);
       } else if (status !== null && TRANSIENT_STATUS_CODES.has(status)) {
         await recordUnavailable(model);
+        lastOverloadError = error;
         remaining = remaining.filter((m) => m !== model);
-        if (remaining.length === 0) {
-          const delay = Math.min(OVERLOAD_RETRY_DELAY_MS, overloadDeadline - Date.now());
-          if (delay <= 0) throw error;
-          console.warn(`[gemini] every model is overloaded — trying again in ${Math.round(delay / 1000)}s`);
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          remaining = [...models];
-        }
+        if (remaining.length === 0) await waitOutOverload();
       } else {
         throw error;
       }
@@ -83,7 +102,12 @@ type StructuredCallParams<T> = {
  * Validates the parsed response against `resultSchema` so a malformed model
  * response fails loudly here rather than corrupting app/DB state downstream.
  */
-export async function callStructured<T>({
+export async function callStructured<T>(params: StructuredCallParams<T>): Promise<T> {
+  return (await callStructuredWithModel(params)).data;
+}
+
+/** callStructured, plus which model in the chain actually answered — for callers that record where content came from. */
+export async function callStructuredWithModel<T>({
   systemInstruction,
   prompt,
   responseSchema,
@@ -92,7 +116,7 @@ export async function callStructured<T>({
   models,
   maxWaitMs = 0,
   overloadWaitMs = 0,
-}: StructuredCallParams<T>): Promise<T> {
+}: StructuredCallParams<T>): Promise<{ data: T; model: string }> {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
     { text: prompt },
   ];
@@ -100,7 +124,7 @@ export async function callStructured<T>({
     parts.push({ inlineData: { mimeType: audio.mimeType, data: audio.data.toString("base64") } });
   }
 
-  const response = await generateWithQuota(models, maxWaitMs, overloadWaitMs, (model) =>
+  const { response, model: usedModel } = await generateWithQuota(models, maxWaitMs, overloadWaitMs, (model) =>
     ai.models.generateContent({
       model,
       contents: [{ role: "user", parts }],
@@ -128,5 +152,5 @@ export async function callStructured<T>({
   if (!result.success) {
     throw new Error(`Gemini response failed schema validation: ${result.error.message}`);
   }
-  return result.data;
+  return { data: result.data, model: usedModel };
 }

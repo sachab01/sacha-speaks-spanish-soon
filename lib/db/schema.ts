@@ -84,6 +84,10 @@ export const sentences = pgTable(
     source: sentenceSourceEnum("source").notNull(),
     spanish: text("spanish").notNull(),
     english: text("english").notNull(),
+    /** The model that wrote this sentence's final text — null for sentences made before this was tracked. */
+    model: text("model"),
+    /** The model that reviewed the bank this sentence belongs to ("bank_builder" sentences only). */
+    reviewModel: text("review_model"),
     /** For "mixed_generated" sentences only: the due word the sentence was written around. */
     focusVocabItemId: integer("focus_vocab_item_id").references(() => vocabItems.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -166,6 +170,10 @@ export const exerciseAttempts = pgTable(
     status: attemptStatusEnum("status").notNull().default("pending"),
     // Null for attempts on a freshly generated (legacy path) or bare-word prompt.
     sentenceId: integer("sentence_id").references(() => sentences.id, { onDelete: "set null" }),
+    /** The model that wrote the prompt sentence — null for a bare-word prompt or when unknown. */
+    sentenceModel: text("sentence_model"),
+    /** The model that reviewed it (stored-bank sentences only). */
+    sentenceReviewModel: text("sentence_review_model"),
     generatedSpanish: text("generated_spanish").notNull(),
     generatedEnglish: text("generated_english").notNull(),
     wordsUsed: jsonb("words_used").$type<string[]>().notNull().default([]),

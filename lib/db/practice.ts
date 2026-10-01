@@ -5,10 +5,11 @@ import { applyMasteryDelta, ratingFromPronunciation, ratingFromWordVerdict, revi
 import { gradePronunciation } from "../gemini/agents/pronunciationCoach";
 import { generatePracticeSentences } from "../gemini/agents/sentenceGenerator";
 import { gradeTranslation, hadMistakes, type TranslationDirection, type WordVerdict } from "../gemini/agents/translationGrader";
-import { FLASH_CHAIN, LITE_CHAIN } from "../gemini/quota";
+import { FLASH_CHAIN, LITE_CHAIN } from "../gemini/models";
 import { alignTranscriptToExpected } from "../wordDiff";
 import { db } from "./client";
 import { exerciseAttempts, sentenceWords, sentences, srsState, topicVocab, vocabItems } from "./schema";
+import type { SentenceOrigin } from "../sentenceSource";
 import { normalizeForVocabMatch, resolveVocabItemIds } from "./vocab";
 
 export const EXERCISE_TYPES = ["writing", "speaking", "listening"] as const;
@@ -109,10 +110,13 @@ async function insertPendingAttempt(values: {
   spanish: string;
   english: string;
   wordsUsed: string[];
+  origin: SentenceOrigin;
 }) {
   const [attempt] = await db
     .insert(exerciseAttempts)
     .values({
+      sentenceModel: values.origin.model,
+      sentenceReviewModel: values.origin.reviewModel,
       topicId: values.topicId,
       exerciseType: values.exerciseType,
       vocabItemId: values.vocabItemId,
@@ -207,7 +211,13 @@ async function buildAttemptFromPool(params: { exerciseType: ExerciseType; topicI
 
   for (const candidate of candidates) {
     const [sentence] = await db
-      .select({ id: sentences.id, topicId: sentences.topicId, spanish: sentences.spanish, english: sentences.english })
+      .select({
+        id: sentences.id,
+        spanish: sentences.spanish,
+        english: sentences.english,
+        model: sentences.model,
+        reviewModel: sentences.reviewModel,
+      })
       .from(sentences)
       .innerJoin(sentenceWords, eq(sentenceWords.sentenceId, sentences.id))
       .where(
@@ -229,6 +239,7 @@ async function buildAttemptFromPool(params: { exerciseType: ExerciseType; topicI
       spanish: sentence.spanish,
       english: sentence.english,
       wordsUsed: await getSentenceWords(sentence.id),
+      origin: { model: sentence.model, reviewModel: sentence.reviewModel },
     });
   }
 
@@ -253,10 +264,11 @@ async function buildAttemptForDueItem(params: {
   const { exerciseType, topicId, dueRow, coveredVocab } = params;
   const focusItem = { spanish: dueRow.spanish, english: dueRow.english };
 
-  let sentence: { spanish: string; english: string; wordsUsed: string[] } = {
+  let sentence: { spanish: string; english: string; wordsUsed: string[]; model: string | null } = {
     spanish: focusItem.spanish,
     english: focusItem.english,
     wordsUsed: [focusItem.spanish],
+    model: null,
   };
 
   // Numbers are drilled directly, never wrapped in a generated sentence.
@@ -269,14 +281,14 @@ async function buildAttemptForDueItem(params: {
       .limit(RECENT_SENTENCE_LIMIT);
 
     try {
-      const [generated] = await generatePracticeSentences({
+      const { sentences: generated, model } = await generatePracticeSentences({
         focusItems: [focusItem],
         coveredVocab,
         recentSentences: recentAttempts.map((a) => a.generatedSpanish),
         models: LITE_CHAIN,
         maxWaitMs: 8_000,
       });
-      if (generated) sentence = generated;
+      if (generated[0]) sentence = { ...generated[0], model };
     } catch (error) {
       console.error("Sentence generation failed, falling back to a bare-word prompt", error);
     }
@@ -290,6 +302,7 @@ async function buildAttemptForDueItem(params: {
     spanish: sentence.spanish,
     english: sentence.english,
     wordsUsed: sentence.wordsUsed,
+    origin: { model: sentence.model, reviewModel: null },
   });
 }
 
@@ -340,6 +353,7 @@ async function takeQueuedGeneratedSentence(exerciseType: ExerciseType) {
       spanish: sentences.spanish,
       english: sentences.english,
       focusVocabItemId: sentences.focusVocabItemId,
+      model: sentences.model,
     })
     .from(sentences)
     .where(queuedGeneratedSentence)
@@ -355,6 +369,7 @@ async function takeQueuedGeneratedSentence(exerciseType: ExerciseType) {
     spanish: queued.spanish,
     english: queued.english,
     wordsUsed: await getSentenceWords(queued.id),
+    origin: { model: queued.model, reviewModel: null },
   });
 }
 
@@ -395,7 +410,7 @@ async function generateMixedBatch(exerciseType: ExerciseType, focus: PracticeFoc
       .limit(MIXED_RECENT_LIMIT),
   ]);
 
-  const generated = await generatePracticeSentences({
+  const { sentences: generated, model } = await generatePracticeSentences({
     focusItems: focusRows.map((r) => ({ spanish: r.spanish, english: r.english })),
     coveredVocab,
     recentSentences: recent.map((r) => r.spanish),
@@ -419,6 +434,7 @@ async function generateMixedBatch(exerciseType: ExerciseType, focus: PracticeFoc
         spanish: sentence.spanish,
         english: sentence.english,
         focusVocabItemId: focusRow.vocabItemId,
+        model,
       })
       .returning({ id: sentences.id });
     await db

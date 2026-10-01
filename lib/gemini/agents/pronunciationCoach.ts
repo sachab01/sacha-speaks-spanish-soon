@@ -2,7 +2,7 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 
 import { callStructured } from "../client";
-import { LITE_CHAIN } from "../quota";
+import { LITE_CHAIN } from "../models";
 
 const PronunciationCoachResultSchema = z.object({
   transcript: z.string(),

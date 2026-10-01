@@ -2,7 +2,7 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 
 import { callStructured as callGemini } from "../client";
-import { LITE_CHAIN } from "../quota";
+import { LITE_CHAIN } from "../models";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 import { callStructured as callMistral } from "../../mistral/client";
 

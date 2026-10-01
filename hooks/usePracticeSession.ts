@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import type { SentenceOrigin } from "@/lib/sentenceSource";
+
 export type PracticeMode = "writing" | "speaking" | "listening";
 export type PracticeFocus = "due" | "weakest" | "stale";
 
@@ -28,6 +30,8 @@ type Prompt = {
   promptSpanish?: string;
   /** Set when Mixed Review couldn't generate a sentence and fell back to a stored one. */
   notice?: string | null;
+  /** Which model(s) made the prompt sentence. */
+  sentenceOrigin: SentenceOrigin;
 };
 
 export type WordVerdict = {

@@ -1,14 +1,20 @@
+import { SentenceSource } from "@/components/practice/SentenceSource";
+import { madeByWeakerFallback, type SentenceOrigin } from "@/lib/sentenceSource";
+
 type BankItem = {
   id: number;
   itemType: "word" | "sentence";
   spanish: string;
   english: string;
   partOfSpeech: string | null;
+  /** Which model(s) made a sentence. */
+  sentenceOrigin: SentenceOrigin;
 };
 
 export function BankView({ bankItems }: { bankItems: BankItem[] }) {
   const words = bankItems.filter((item) => item.itemType === "word");
   const sentences = bankItems.filter((item) => item.itemType === "sentence");
+  const fallbackCount = sentences.filter((sentence) => madeByWeakerFallback(sentence.sentenceOrigin)).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,6 +42,13 @@ export function BankView({ bankItems }: { bankItems: BankItem[] }) {
         <h2 className="mb-2 text-2xl font-black text-accent-600 dark:text-accent-400">
           Sentences ({sentences.length})
         </h2>
+        {fallbackCount > 0 && (
+          <p className="mb-3 rounded-lg border border-red-300 px-3 py-2 text-sm font-bold text-red-600 dark:border-red-800 dark:text-red-400">
+            ⚠ {fallbackCount} of these sentences were made by the weaker fallback model because the better models
+            were unavailable — they may be less natural or correct. Rebuild this topic&apos;s bank later to replace
+            them.
+          </p>
+        )}
         <ul className="flex flex-col gap-1.5">
           {sentences.map((sentence) => (
             <li
@@ -45,6 +58,7 @@ export function BankView({ bankItems }: { bankItems: BankItem[] }) {
             >
               <p className="font-bold">{sentence.spanish}</p>
               <p className="font-bold text-accent-600 dark:text-accent-400">{sentence.english}</p>
+              <SentenceSource origin={sentence.sentenceOrigin} className="mt-1 text-xs text-accent-500" />
             </li>
           ))}
         </ul>

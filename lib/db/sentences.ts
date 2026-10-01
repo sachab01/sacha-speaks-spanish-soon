@@ -19,6 +19,9 @@ const MIN_SENTENCES_PER_WORD = 3;
 
 type ExistingWord = { id: number; spanish: string; english: string; source: string };
 
+/** A bank sentence plus which model wrote its final text and which reviewed it. */
+type SourcedSentence = BankSentence & { model: string; reviewModel: string };
+
 /**
  * The prompt asks the model not to list articles, but if it does anyway they
  * aren't turned into topic vocabulary. Everything else it lists is a word the
@@ -31,7 +34,7 @@ function isGlueWord(key: string, existingByKey: Map<string, ExistingWord>): bool
   return existingByKey.get(key)?.source === "core_vocab" || ARTICLES.has(key);
 }
 
-function dedupeSentences(bank: BankSentence[]): BankSentence[] {
+function dedupeSentences<S extends BankSentence>(bank: S[]): S[] {
   const seen = new Set<string>();
   return bank.filter((sentence) => {
     const key = normalizeForVocabMatch(sentence.spanish);
@@ -74,15 +77,23 @@ async function loadExistingWords(): Promise<Map<string, ExistingWord>> {
  * wrong/unnatural sentences and completes their word lists. Three requests
  * at most, out of the ~80/day the Flash chain allows.
  */
-async function generateBankForTopic(topic: typeof topics.$inferSelect, existingByKey: Map<string, ExistingWord>) {
+async function generateBankForTopic(
+  topic: typeof topics.$inferSelect,
+  existingByKey: Map<string, ExistingWord>,
+): Promise<SourcedSentence[]> {
   const existingVocab = Array.from(existingByKey.values());
+  const withModel = ({ sentences, model }: { sentences: BankSentence[]; model: string }) =>
+    sentences.map((sentence) => ({ ...sentence, model }));
+
   let bank = dedupeSentences(
-    await generateSentenceBank({
-      topicName: topic.name,
-      instructions: topic.instructions,
-      sentenceCount: BANK_SENTENCE_COUNT,
-      existingVocab,
-    }),
+    withModel(
+      await generateSentenceBank({
+        topicName: topic.name,
+        instructions: topic.instructions,
+        sentenceCount: BANK_SENTENCE_COUNT,
+        existingVocab,
+      }),
+    ),
   );
 
   const needed = findUnderCoveredWords(bank, existingByKey);
@@ -94,15 +105,24 @@ async function generateBankForTopic(topic: typeof topics.$inferSelect, existingB
       existingSentences: bank.map((s) => s.spanish),
       existingVocab,
     });
-    bank = dedupeSentences([...bank, ...topUp]);
+    bank = dedupeSentences([...bank, ...withModel(topUp)]);
   }
 
-  const reviewed = await reviewSentenceBank({ topicName: topic.name, bank, existingVocab });
-  return dedupeSentences(reviewed).map((sentence) => ({
+  const reviewed = await reviewSentenceBank({
+    topicName: topic.name,
+    bank: bank.map(({ spanish, english, words }) => ({ spanish, english, words })),
+    existingVocab,
+  });
+  // A sentence the review kept unchanged is still the original writer's; one
+  // it rewrote (or added) is the reviewer's own.
+  const writerByKey = new Map(bank.map((s) => [normalizeForVocabMatch(s.spanish), s.model]));
+  return dedupeSentences(reviewed.sentences).map((sentence) => ({
     ...sentence,
     // Names can still slip through as "proper noun" — a sentence may mention
     // a place, but it isn't vocabulary to drill.
     words: sentence.words.filter((w) => !/proper/i.test(w.partOfSpeech)),
+    model: writerByKey.get(normalizeForVocabMatch(sentence.spanish)) ?? reviewed.model,
+    reviewModel: reviewed.model,
   }));
 }
 
@@ -111,7 +131,7 @@ async function generateBankForTopic(topic: typeof topics.$inferSelect, existingB
  * global vocab item (or created), linked to the topic unless it's core glue
  * vocabulary, and linked to every sentence it appears in.
  */
-async function persistBank(topicId: number, bank: BankSentence[], existingByKey: Map<string, ExistingWord>) {
+async function persistBank(topicId: number, bank: SourcedSentence[], existingByKey: Map<string, ExistingWord>) {
   const idByKey = new Map<string, number>();
   for (const sentence of bank) {
     for (const word of sentence.words) {
@@ -140,7 +160,16 @@ async function persistBank(topicId: number, bank: BankSentence[], existingByKey:
 
   const inserted = await db
     .insert(sentences)
-    .values(bank.map((s) => ({ topicId, source: "bank_builder" as const, spanish: s.spanish, english: s.english })))
+    .values(
+      bank.map((s) => ({
+        topicId,
+        source: "bank_builder" as const,
+        spanish: s.spanish,
+        english: s.english,
+        model: s.model,
+        reviewModel: s.reviewModel,
+      })),
+    )
     .returning({ id: sentences.id, spanish: sentences.spanish });
   const sentenceIdBySpanish = new Map(inserted.map((row) => [row.spanish, row.id]));
 
