@@ -1,4 +1,4 @@
-import { markDailyQuotaUsed, releaseDailyRequest, reserveDailyRequest } from "../db/geminiUsage";
+import { markDailyQuotaUsed, reserveDailyRequest } from "../db/geminiUsage";
 import { QuotaExhaustedError } from "../errors";
 import type { ModelChain } from "./models";
 
@@ -136,13 +136,9 @@ export async function recordRateLimitError(model: string, error: unknown): Promi
 
 /**
  * Records a 500/503 ("overloaded"), so the next calls try the rest of the
- * chain first for a few minutes, and gives back the daily request it was
- * counted as — an overload spike would otherwise burn through a 20/day
- * model in a handful of failed calls. If Google does count failed requests
- * after all, the worst case is a 429 naming the daily quota, which
- * recordRateLimitError then turns into "exhausted for today".
+ * chain first for a few minutes. The request still counts toward the daily
+ * limit — Google counts failed requests too.
  */
-export async function recordUnavailable(model: string): Promise<void> {
+export function recordUnavailable(model: string): void {
   state.unavailableUntil.set(model, Date.now() + UNAVAILABLE_COOLDOWN_MS);
-  await releaseDailyRequest(model, quotaDay());
 }

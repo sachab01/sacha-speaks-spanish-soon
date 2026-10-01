@@ -50,6 +50,5 @@ export async function gradePronunciation(params: {
     // No backup model understands audio, so queue briefly behind the
     // per-minute limit rather than failing the recording outright.
     maxWaitMs: 20_000,
-    overloadWaitMs: 3_000,
   });
 }

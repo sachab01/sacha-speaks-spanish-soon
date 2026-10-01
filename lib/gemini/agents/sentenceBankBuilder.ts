@@ -5,8 +5,6 @@ import { callStructuredWithModel } from "../client";
 import { BANK_CHAIN } from "../models";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 
-const BANK_OVERLOAD_WAIT_MS = 5 * 60_000;
-
 const BankWordSchema = z.object({
   spanish: z.string().min(1),
   english: z.string().min(1),
@@ -101,9 +99,8 @@ ${formatWhitelist(existingVocab)}`,
     resultSchema: SentenceBankSchema,
     models: BANK_CHAIN,
     // Bank building runs rarely and isn't interactive, so it can afford to
-    // wait out a per-minute limit, or a few minutes of every model being overloaded.
+    // wait out a per-minute limit.
     maxWaitMs: 70_000,
-    overloadWaitMs: BANK_OVERLOAD_WAIT_MS,
   });
   return { sentences: data.sentences, model };
 }
@@ -138,7 +135,6 @@ ${formatWhitelist(existingVocab)}`,
     resultSchema: SentenceBankSchema,
     models: BANK_CHAIN,
     maxWaitMs: 70_000,
-    overloadWaitMs: BANK_OVERLOAD_WAIT_MS,
   });
   return { sentences: data.sentences, model };
 }
@@ -181,7 +177,6 @@ ${formatWhitelist(existingVocab)}`,
     resultSchema: SentenceBankSchema,
     models: BANK_CHAIN,
     maxWaitMs: 70_000,
-    overloadWaitMs: BANK_OVERLOAD_WAIT_MS,
   });
   return { sentences: data.sentences, model };
 }

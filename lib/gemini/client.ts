@@ -14,47 +14,29 @@ if (!apiKey) {
 export const ai = new GoogleGenAI({ apiKey });
 
 const TRANSIENT_STATUS_CODES = new Set([500, 503]);
-/** Pause before going through the whole chain again when every model in it reported being overloaded. */
-const OVERLOAD_RETRY_DELAY_MS = 30_000;
 
 /**
- * Sends one request on the first model in `models` with quota left. A 429
- * is never retried on the same model — retrying a per-minute or daily limit
- * a second later just burns more requests — it's recorded and the next model
- * in the chain is tried instead. A transient 500/503 ("overloaded") moves on
- * to the next model too; once every model in the chain has been overloaded,
- * the whole chain is tried again after a pause, for up to `overloadWaitMs`.
+ * Sends one request on the first model in `models` with quota left. Failed
+ * requests count toward Google's daily limit too (a 503 included — verified
+ * on the AI Studio dashboard), so nothing is ever retried on the same model:
+ * a 429 or a 500/503 ("overloaded") is recorded and the next model in the
+ * chain is tried instead, and once the chain runs out, the call fails.
  */
 async function generateWithQuota<R>(
   models: ModelChain,
   maxWaitMs: number,
-  overloadWaitMs: number,
   send: (model: string) => Promise<R>,
 ): Promise<{ response: R; model: string }> {
-  const overloadDeadline = Date.now() + overloadWaitMs;
   let remaining = [...models];
-  let lastOverloadError: unknown = null;
-
-  /** Once every model with quota left has been overloaded: pause and start over, or give up with that error. */
-  async function waitOutOverload() {
-    const delay = Math.min(OVERLOAD_RETRY_DELAY_MS, overloadDeadline - Date.now());
-    if (delay <= 0) throw lastOverloadError;
-    console.warn(`[gemini] every model is overloaded — trying again in ${Math.round(delay / 1000)}s`);
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    remaining = [...models];
-  }
-
+  let lastError: unknown = null;
   while (true) {
     let model: string;
     try {
       model = await acquireModel(remaining, maxWaitMs);
     } catch (error) {
-      // Out of quota on the models still in play, but others were only
-      // overloaded — those still have quota, so they're worth waiting for.
-      if (error instanceof QuotaExhaustedError && lastOverloadError !== null) {
-        await waitOutOverload();
-        continue;
-      }
+      // Report why the last model actually failed (e.g. overloaded), not
+      // just that nothing is left to try.
+      if (error instanceof QuotaExhaustedError && lastError !== null) throw lastError;
       throw error;
     }
 
@@ -68,13 +50,12 @@ async function generateWithQuota<R>(
       if (status === 429) {
         await recordRateLimitError(model, error);
       } else if (status !== null && TRANSIENT_STATUS_CODES.has(status)) {
-        await recordUnavailable(model);
-        lastOverloadError = error;
-        remaining = remaining.filter((m) => m !== model);
-        if (remaining.length === 0) await waitOutOverload();
+        recordUnavailable(model);
       } else {
         throw error;
       }
+      lastError = error;
+      remaining = remaining.filter((m) => m !== model);
     }
   }
 }
@@ -93,8 +74,6 @@ type StructuredCallParams<T> = {
   models: ModelChain;
   /** How long to wait for a per-minute slot before giving up with QuotaExhaustedError (default: don't wait). */
   maxWaitMs?: number;
-  /** How long to keep retrying while every model is overloaded (503) before giving up (default: don't retry). */
-  overloadWaitMs?: number;
 };
 
 /**
@@ -115,7 +94,6 @@ export async function callStructuredWithModel<T>({
   audio,
   models,
   maxWaitMs = 0,
-  overloadWaitMs = 0,
 }: StructuredCallParams<T>): Promise<{ data: T; model: string }> {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
     { text: prompt },
@@ -124,7 +102,7 @@ export async function callStructuredWithModel<T>({
     parts.push({ inlineData: { mimeType: audio.mimeType, data: audio.data.toString("base64") } });
   }
 
-  const { response, model: usedModel } = await generateWithQuota(models, maxWaitMs, overloadWaitMs, (model) =>
+  const { response, model: usedModel } = await generateWithQuota(models, maxWaitMs, (model) =>
     ai.models.generateContent({
       model,
       contents: [{ role: "user", parts }],

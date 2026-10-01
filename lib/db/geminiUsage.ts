@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { db } from "./client";
 import { geminiUsage } from "./schema";
@@ -15,14 +15,6 @@ export async function reserveDailyRequest(model: string, day: string, dailyLimit
     })
     .returning({ requests: geminiUsage.requests });
   return rows.length > 0;
-}
-
-/** Gives back one request counted by reserveDailyRequest. */
-export async function releaseDailyRequest(model: string, day: string): Promise<void> {
-  await db
-    .update(geminiUsage)
-    .set({ requests: sql`greatest(${geminiUsage.requests} - 1, 0)` })
-    .where(and(eq(geminiUsage.model, model), eq(geminiUsage.day, day)));
 }
 
 /** Marks a model's day as fully used, e.g. after Google itself reported the daily quota exhausted. */

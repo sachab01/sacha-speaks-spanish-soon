@@ -97,6 +97,5 @@ The learner's question is in the attached audio recording. Transcribe it into "q
     // A question is asked mid-exercise, so briefly queueing behind the
     // per-minute limit is better than failing the question outright.
     maxWaitMs: 15_000,
-    overloadWaitMs: 3_000,
   });
 }
