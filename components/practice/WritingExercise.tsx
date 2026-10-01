@@ -11,6 +11,7 @@ import {
   type PracticeScope,
 } from "@/hooks/usePracticeSession";
 import { FeedbackCard } from "./FeedbackCard";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
 
 export function WritingExercise({
   scope,
@@ -47,6 +48,7 @@ export function WritingExercise({
   return (
     <Fragment>
       <QnaOverlay qnaUrl={qnaPath(scope, "writing")} attemptId={prompt.attemptId} />
+      {prompt.notice && <PracticeNotice text={prompt.notice} />}
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs tracking-wide text-neutral-500 uppercase">Translate to Spanish</p>

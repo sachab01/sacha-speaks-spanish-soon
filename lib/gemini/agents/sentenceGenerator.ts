@@ -2,15 +2,19 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 
 import { callStructured } from "../client";
+import type { ModelChain } from "../quota";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 
-const SentenceGeneratorResultSchema = z.object({
+const GeneratedSentenceSchema = z.object({
+  focusWord: z.string().min(1),
   spanish: z.string().min(1),
   english: z.string().min(1),
   wordsUsed: z.array(z.string()),
 });
 
-export type SentenceGeneratorResult = z.infer<typeof SentenceGeneratorResultSchema>;
+const SentenceBatchSchema = z.object({ sentences: z.array(GeneratedSentenceSchema) });
+
+export type GeneratedSentence = z.infer<typeof GeneratedSentenceSchema>;
 
 /** The model occasionally wraps a word in markdown emphasis (**word**) — strip it, since this text is displayed and spoken verbatim, not rendered as markdown. */
 function stripMarkdown(text: string): string {
@@ -20,34 +24,50 @@ function stripMarkdown(text: string): string {
 const RESPONSE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
-    spanish: { type: Type.STRING },
-    english: { type: Type.STRING },
-    wordsUsed: { type: Type.ARRAY, items: { type: Type.STRING } },
+    sentences: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          focusWord: { type: Type.STRING },
+          spanish: { type: Type.STRING },
+          english: { type: Type.STRING },
+          wordsUsed: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ["focusWord", "spanish", "english", "wordsUsed"],
+      },
+    },
   },
-  required: ["spanish", "english", "wordsUsed"],
+  required: ["sentences"],
 };
 
-const SYSTEM_INSTRUCTION = `You are generating a single short, natural Spanish practice sentence for a language learner.
+const SYSTEM_INSTRUCTION = `You write short Spanish practice sentences for a beginner-to-intermediate learner — one sentence per focus word you're given.
+
+The most important rule: every sentence must be something a native speaker in Mexico would actually say in everyday life. Common words, natural word order, idiomatic phrasing — the kind of sentence you'd overhear at a café, in a taxi, or between friends. Never produce a stilted textbook sentence or force unrelated words together just to use them; a short, natural sentence is always better than a longer, contrived one. Before answering, reread each sentence and ask whether a Mexican speaker would really say it like that — if not, rewrite it.
 
 Rules:
-- Use MEXICAN Spanish throughout — vocabulary, phrasing, and grammar. Use "ustedes" for "you all", never "vosotros". Prefer Mexican lexical choices where they differ from Peninsular Spanish.
-- PRESENT TENSE ONLY — the learner isn't ready for past tense yet. Never use pretérito or imperfecto conjugations (e.g. never "fui", "tuve", "estaba", "hablé"); every verb must be in the present (or present-adjacent: commands, "voy a + infinitive" for near-future) regardless of what the topic or focus word might suggest.
-- Use ONLY vocabulary from the whitelist given to you, plus ordinary Spanish function words (articles, pronouns, common prepositions/conjunctions, and basic conjugations of ser/estar/tener).
-- The sentence MUST include the given focus word/phrase, naturally inflected if it's a verb.
-- Combine the focus word with 1-3 other whitelist words/phrases to build a complete, natural sentence, rather than a bare restatement of the focus word alone. If a "preferred words" list is given and any fit naturally, favor those over other whitelist words for this supporting role — they're words the learner needs more practice on.
-- Vary your sentence structure and word choices between calls — avoid always producing the same, most obvious example sentence for a given focus word.
-- "wordsUsed" lists the whitelist entries you actually drew on (their whitelist form), including the focus word.
-- "english" is a natural English translation of the sentence you produced.`;
+- MEXICAN Spanish throughout — vocabulary, phrasing, and grammar. Use "ustedes" for "you all", never "vosotros". Prefer Mexican lexical choices where they differ from Peninsular Spanish.
+- PRESENT TENSE ONLY — the learner isn't ready for past tense yet. Never use pretérito or imperfecto conjugations (e.g. never "fui", "tuve", "estaba", "hablé"); every verb must be in the present (or present-adjacent: commands, "voy a + infinitive" for near-future).
+- Each sentence MUST include its focus word/phrase, naturally inflected if it's a verb. Copy the focus word verbatim into "focusWord".
+- Build the rest of the sentence from the learner's vocabulary list where those words fit naturally. You may also use very common, basic Spanish words that aren't on the list, but never rare, advanced, or regional-slang words.
+- Grammatically correct and complete: right gender/number agreement, right conjugations, correct accents and Spanish punctuation (¿…? ¡…!).
+- Vary sentence structure (questions, answers, requests, statements) and avoid reusing any sentence you're told to avoid.
+- "wordsUsed" lists every entry from the learner's vocabulary list that the sentence uses, exactly as written in the list, including the focus word.
+- "english" is a natural English translation of the sentence.`;
 
-export async function generatePracticeSentence(params: {
-  focusItem: CoveredVocabItem;
+/**
+ * Generates one fresh practice sentence per focus item in a single request —
+ * batched because the free-tier limits count requests, not tokens.
+ */
+export async function generatePracticeSentences(params: {
+  focusItems: CoveredVocabItem[];
   coveredVocab: CoveredVocabItem[];
-  /** Words the learner is currently weakest on — a soft preference for filler word choice, not a constraint. */
-  preferredWords?: CoveredVocabItem[];
-  /** Recent sentences generated for this same focus item, to steer away from repeats. */
+  /** Recent sentences, to steer away from repeats. */
   recentSentences?: string[];
-}): Promise<SentenceGeneratorResult> {
-  const { focusItem, coveredVocab, preferredWords = [], recentSentences = [] } = params;
+  models: ModelChain;
+  maxWaitMs?: number;
+}): Promise<GeneratedSentence[]> {
+  const { focusItems, coveredVocab, recentSentences = [], models, maxWaitMs } = params;
 
   const avoidBlock = recentSentences.length
     ? `\n\nAvoid reusing any of these exact sentences — write something different:\n${recentSentences
@@ -55,23 +75,23 @@ export async function generatePracticeSentence(params: {
         .join("\n")}`
     : "";
 
-  const preferredBlock = preferredWords.length
-    ? `\n\nPreferred words for the supporting role, if any fit naturally:\n${formatWhitelist(preferredWords)}`
-    : "";
-
   const result = await callStructured({
     systemInstruction: SYSTEM_INSTRUCTION,
-    prompt: `Focus word/phrase (must appear in the sentence): "${focusItem.spanish}" (${focusItem.english})
+    prompt: `Focus words/phrases — write exactly one sentence for each, in this order:
+${formatWhitelist(focusItems)}
 
-Covered vocabulary whitelist:
-${formatWhitelist(coveredVocab)}${preferredBlock}${avoidBlock}`,
+The learner's vocabulary list:
+${formatWhitelist(coveredVocab)}${avoidBlock}`,
     responseSchema: RESPONSE_SCHEMA,
-    resultSchema: SentenceGeneratorResultSchema,
+    resultSchema: SentenceBatchSchema,
+    models,
+    maxWaitMs,
   });
 
-  return {
-    spanish: stripMarkdown(result.spanish),
-    english: stripMarkdown(result.english),
-    wordsUsed: result.wordsUsed.map(stripMarkdown),
-  };
+  return result.sentences.map((s) => ({
+    focusWord: stripMarkdown(s.focusWord),
+    spanish: stripMarkdown(s.spanish),
+    english: stripMarkdown(s.english),
+    wordsUsed: s.wordsUsed.map(stripMarkdown),
+  }));
 }

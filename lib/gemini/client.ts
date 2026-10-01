@@ -1,6 +1,9 @@
 import { GoogleGenAI, type Schema } from "@google/genai";
 import type { ZodType } from "zod";
 
+import { httpStatusOf } from "../errors";
+import { acquireModel, recordRateLimitError, recordUnavailable, type ModelChain } from "./quota";
+
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
@@ -9,44 +12,52 @@ if (!apiKey) {
 
 export const ai = new GoogleGenAI({ apiKey });
 
-// gemini-3.5-flash-lite is the current free-tier-eligible model that supports
-// both text and inline audio input. The non-lite gemini-3.5-flash's free tier
-// is capped at only 20 requests/day (confirmed by hitting that limit during
-// development) — far too low for real use; the lite variant has a much higher
-// free daily quota while still handling our structured-JSON + audio calls
-// fine. Overridable via env if a better option needs to be swapped in later.
-// Shared across the audio-understanding agents (pronunciation grading, spoken
-// Q&A) and the two highest-frequency text agents (translation grading,
-// sentence generation) — the latter fall back to Mistral (grading) or simply
-// error (sentence generation) if this quota is exhausted.
-export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.5-flash-lite";
+const TRANSIENT_STATUS_CODES = new Set([500, 503]);
+/** Pause before going through the whole chain again when every model in it reported being overloaded. */
+const OVERLOAD_RETRY_DELAY_MS = 30_000;
 
-const TRANSIENT_STATUS_CODES = new Set([429, 503]);
-const MAX_ATTEMPTS = 3;
-
-function isTransientApiError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "status" in error &&
-    TRANSIENT_STATUS_CODES.has((error as { status: unknown }).status as number)
-  );
-}
-
-async function withRetries<T>(fn: () => Promise<T>): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+/**
+ * Sends one request on the first model in `models` with quota left. A 429
+ * is never retried on the same model — retrying a per-minute or daily limit
+ * a second later just burns more requests — it's recorded and the next model
+ * in the chain is tried instead. A transient 500/503 ("overloaded") moves on
+ * to the next model too; once every model in the chain has been overloaded,
+ * the whole chain is tried again after a pause, for up to `overloadWaitMs`.
+ */
+async function generateWithQuota<R>(
+  models: ModelChain,
+  maxWaitMs: number,
+  overloadWaitMs: number,
+  send: (model: string) => Promise<R>,
+): Promise<R> {
+  const overloadDeadline = Date.now() + overloadWaitMs;
+  let remaining = [...models];
+  while (true) {
+    const model = await acquireModel(remaining, maxWaitMs);
     try {
-      return await fn();
+      const response = await send(model);
+      if (model !== models[0]) console.info(`[gemini] served by fallback model ${model}`);
+      return response;
     } catch (error) {
-      lastError = error;
-      if (!isTransientApiError(error) || attempt === MAX_ATTEMPTS) {
+      const status = httpStatusOf(error);
+      if (status !== null) console.warn(`[gemini] ${model} failed with ${status}, trying the next option`);
+      if (status === 429) {
+        await recordRateLimitError(model, error);
+      } else if (status !== null && TRANSIENT_STATUS_CODES.has(status)) {
+        await recordUnavailable(model);
+        remaining = remaining.filter((m) => m !== model);
+        if (remaining.length === 0) {
+          const delay = Math.min(OVERLOAD_RETRY_DELAY_MS, overloadDeadline - Date.now());
+          if (delay <= 0) throw error;
+          console.warn(`[gemini] every model is overloaded — trying again in ${Math.round(delay / 1000)}s`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          remaining = [...models];
+        }
+      } else {
         throw error;
       }
-      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
     }
   }
-  throw lastError;
 }
 
 type StructuredCallParams<T> = {
@@ -59,6 +70,12 @@ type StructuredCallParams<T> = {
   /** Zod schema re-validating the parsed JSON before it's trusted by callers. */
   resultSchema: ZodType<T>;
   audio?: { data: Buffer; mimeType: string };
+  /** Models to try in order (see quota.ts) — the first with quota left is used, the rest are fallbacks. */
+  models: ModelChain;
+  /** How long to wait for a per-minute slot before giving up with QuotaExhaustedError (default: don't wait). */
+  maxWaitMs?: number;
+  /** How long to keep retrying while every model is overloaded (503) before giving up (default: don't retry). */
+  overloadWaitMs?: number;
 };
 
 /**
@@ -72,6 +89,9 @@ export async function callStructured<T>({
   responseSchema,
   resultSchema,
   audio,
+  models,
+  maxWaitMs = 0,
+  overloadWaitMs = 0,
 }: StructuredCallParams<T>): Promise<T> {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
     { text: prompt },
@@ -80,9 +100,9 @@ export async function callStructured<T>({
     parts.push({ inlineData: { mimeType: audio.mimeType, data: audio.data.toString("base64") } });
   }
 
-  const response = await withRetries(() =>
+  const response = await generateWithQuota(models, maxWaitMs, overloadWaitMs, (model) =>
     ai.models.generateContent({
-      model: GEMINI_MODEL,
+      model,
       contents: [{ role: "user", parts }],
       config: {
         systemInstruction,

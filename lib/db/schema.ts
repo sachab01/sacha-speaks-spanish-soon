@@ -19,6 +19,7 @@ export const exerciseTypeEnum = pgEnum("exercise_type", ["writing", "speaking", 
 export const srsCardStateEnum = pgEnum("srs_card_state", ["new", "learning", "review", "relearning"]);
 export const fsrsRatingEnum = pgEnum("fsrs_rating", ["again", "hard", "good", "easy"]);
 export const attemptStatusEnum = pgEnum("attempt_status", ["pending", "graded"]);
+export const sentenceSourceEnum = pgEnum("sentence_source", ["bank_builder", "mixed_generated"]);
 
 export const topics = pgTable("topics", {
   id: serial("id").primaryKey(),
@@ -69,6 +70,61 @@ export const topicVocab = pgTable(
   ],
 );
 
+/**
+ * Practice sentences, stored once and reused, so topic practice never needs a
+ * model call. "bank_builder" sentences are a topic's pool (generated up front
+ * together with the vocabulary they contain); "mixed_generated" ones are
+ * Mixed Review's batch-generated sentences (topicId null), queued until shown.
+ */
+export const sentences = pgTable(
+  "sentences",
+  {
+    id: serial("id").primaryKey(),
+    topicId: integer("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+    source: sentenceSourceEnum("source").notNull(),
+    spanish: text("spanish").notNull(),
+    english: text("english").notNull(),
+    /** For "mixed_generated" sentences only: the due word the sentence was written around. */
+    focusVocabItemId: integer("focus_vocab_item_id").references(() => vocabItems.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("sentences_topic_id_idx").on(table.topicId)],
+);
+
+/** Which vocab items a sentence contains — every one of them is graded when the sentence is practiced. */
+export const sentenceWords = pgTable(
+  "sentence_words",
+  {
+    id: serial("id").primaryKey(),
+    sentenceId: integer("sentence_id")
+      .notNull()
+      .references(() => sentences.id, { onDelete: "cascade" }),
+    vocabItemId: integer("vocab_item_id")
+      .notNull()
+      .references(() => vocabItems.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("sentence_words_sentence_item_unique").on(table.sentenceId, table.vocabItemId),
+    index("sentence_words_vocab_item_id_idx").on(table.vocabItemId),
+  ],
+);
+
+/**
+ * Gemini requests made per model per quota day (Pacific time, matching when
+ * Google resets free-tier daily limits) — persisted rather than in-memory so
+ * a dev-server restart can't silently reset the count. See lib/gemini/quota.ts.
+ */
+export const geminiUsage = pgTable(
+  "gemini_usage",
+  {
+    id: serial("id").primaryKey(),
+    model: text("model").notNull(),
+    day: text("day").notNull(),
+    requests: integer("requests").notNull().default(0),
+  },
+  (table) => [unique("gemini_usage_model_day_unique").on(table.model, table.day)],
+);
+
 /** One shared SRS card per (vocabItem, exerciseType) — progress is not duplicated per topic. */
 export const srsState = pgTable(
   "srs_state",
@@ -108,6 +164,8 @@ export const exerciseAttempts = pgTable(
       .notNull()
       .references(() => vocabItems.id, { onDelete: "cascade" }),
     status: attemptStatusEnum("status").notNull().default("pending"),
+    // Null for attempts on a freshly generated (legacy path) or bare-word prompt.
+    sentenceId: integer("sentence_id").references(() => sentences.id, { onDelete: "set null" }),
     generatedSpanish: text("generated_spanish").notNull(),
     generatedEnglish: text("generated_english").notNull(),
     wordsUsed: jsonb("words_used").$type<string[]>().notNull().default([]),
@@ -123,6 +181,7 @@ export const exerciseAttempts = pgTable(
   (table) => [
     index("exercise_attempts_topic_id_idx").on(table.topicId),
     index("exercise_attempts_vocab_item_id_idx").on(table.vocabItemId),
+    index("exercise_attempts_sentence_id_idx").on(table.sentenceId),
   ],
 );
 

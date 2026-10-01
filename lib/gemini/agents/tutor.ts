@@ -2,6 +2,7 @@ import { Type } from "@google/genai";
 import { z } from "zod";
 
 import { callStructured as callGemini } from "../client";
+import { LITE_CHAIN } from "../quota";
 import { type CoveredVocabItem, formatWhitelist } from "../vocab";
 import { callStructured as callMistral } from "../../mistral/client";
 
@@ -92,5 +93,10 @@ The learner's question is in the attached audio recording. Transcribe it into "q
     responseSchema: RESPONSE_SCHEMA,
     resultSchema: TutorResultSchema,
     audio: question.audioBytes,
+    models: LITE_CHAIN,
+    // A question is asked mid-exercise, so briefly queueing behind the
+    // per-minute limit is better than failing the question outright.
+    maxWaitMs: 15_000,
+    overloadWaitMs: 3_000,
   });
 }

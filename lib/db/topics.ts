@@ -1,8 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { generateBank } from "../gemini/agents/bankBuilder";
 import { db } from "./client";
-import { topicVocab, topics, vocabItems } from "./schema";
+import { sentences, topicVocab, topics, vocabItems } from "./schema";
 import { findOrCreateVocabItem, linkVocabToTopic } from "./vocab";
 
 export type TopicSummary = {
@@ -20,7 +20,8 @@ export async function listTopics(): Promise<TopicSummary[]> {
       name: topics.name,
       createdAt: topics.createdAt,
       wordCount: sql<number>`count(*) filter (where ${vocabItems.itemType} = 'word')`.mapWith(Number),
-      sentenceCount: sql<number>`count(*) filter (where ${vocabItems.itemType} = 'sentence')`.mapWith(Number),
+      // Legacy sentence vocab items plus the topic's stored sentence bank.
+      sentenceCount: sql<number>`count(*) filter (where ${vocabItems.itemType} = 'sentence') + (select count(*) from ${sentences} where ${sentences.topicId} = ${topics.id} and ${sentences.source} = 'bank_builder')`.mapWith(Number),
     })
     .from(topics)
     .leftJoin(topicVocab, eq(topicVocab.topicId, topics.id))
@@ -60,7 +61,24 @@ export async function getTopicWithBank(topicId: number) {
     .where(eq(topicVocab.topicId, topicId))
     .orderBy(vocabItems.createdAt);
 
-  return { topic, bankItems: items };
+  // A topic built as a sentence bank stores its sentences separately, not as
+  // vocab items — listed alongside so the bank view and session coverage see them.
+  const poolSentences = await db
+    .select({ id: sentences.id, spanish: sentences.spanish, english: sentences.english, createdAt: sentences.createdAt })
+    .from(sentences)
+    .where(and(eq(sentences.topicId, topicId), eq(sentences.source, "bank_builder")))
+    .orderBy(sentences.id);
+
+  const bankItems = [
+    ...items,
+    ...poolSentences.map((s) => ({
+      ...s,
+      itemType: "sentence" as const,
+      partOfSpeech: null,
+      source: "bank_builder" as const,
+    })),
+  ];
+  return { topic, bankItems };
 }
 
 export type VocabEntry = {

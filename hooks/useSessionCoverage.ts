@@ -23,6 +23,13 @@ export function useSessionCoverage() {
         if (!word.vocabWord) continue;
         next.set(word.vocabWord.trim().toLowerCase(), verdictScore(word.verdict));
       }
+      // The sentence itself counts as practiced too — for a topic built as a
+      // sentence bank it's never one of the graded vocab words above.
+      if (result.correctAnswerEs) {
+        const scores = (result.words ?? []).map((w) => verdictScore(w.verdict));
+        const mean = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        next.set(result.correctAnswerEs.trim().toLowerCase(), mean);
+      }
       return next;
     });
   }, []);

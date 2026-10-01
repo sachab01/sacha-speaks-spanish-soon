@@ -39,7 +39,8 @@ export function BankView({ bankItems }: { bankItems: BankItem[] }) {
         <ul className="flex flex-col gap-1.5">
           {sentences.map((sentence) => (
             <li
-              key={sentence.id}
+              // Spanish text, not id: stored-bank sentences and legacy sentence items have ids from different tables.
+              key={sentence.spanish}
               className="rounded-lg border border-accent-100 px-3 py-2 text-sm transition-colors hover:border-accent-300 hover:bg-accent-50/60 dark:border-accent-900 dark:hover:border-accent-800 dark:hover:bg-accent-950/30"
             >
               <p className="font-bold">{sentence.spanish}</p>

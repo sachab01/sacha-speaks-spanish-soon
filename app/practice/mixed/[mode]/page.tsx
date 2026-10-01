@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { MixedPracticeSessionPanel } from "@/components/practice/MixedPracticeSessionPanel";
 import { PRACTICE_MODE_STYLES } from "@/components/practice/practiceCardStyles";
-import { PRACTICE_FOCUSES, parsePracticeMode, type PracticeFocus } from "@/lib/api-utils";
+import { PRACTICE_FOCUSES, parseGenerateFlag, parsePracticeMode, type PracticeFocus } from "@/lib/api-utils";
 import { getTopicWithBank, listTopics } from "@/lib/db/topics";
 import type { TopicItemInfo } from "@/lib/practiceStats";
 
@@ -12,10 +12,10 @@ export default async function MixedPracticePage({
   searchParams,
 }: {
   params: Promise<{ mode: string }>;
-  searchParams: Promise<{ focus?: string }>;
+  searchParams: Promise<{ focus?: string; generate?: string }>;
 }) {
   const { mode: modeParam } = await params;
-  const { focus: focusParam } = await searchParams;
+  const { focus: focusParam, generate: generateParam } = await searchParams;
 
   const mode = parsePracticeMode(modeParam);
   if (!mode) notFound();
@@ -53,6 +53,7 @@ export default async function MixedPracticePage({
         <MixedPracticeSessionPanel
           mode={mode}
           focus={focus}
+          generate={parseGenerateFlag(generateParam)}
           basePath={basePath}
           topics={topics.map((topic) => ({
             id: topic.id,

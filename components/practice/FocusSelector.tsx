@@ -10,16 +10,19 @@ export function FocusSelector({
   basePath,
   current,
   inverted = false,
+  extraQuery = "",
 }: {
   basePath: string;
   current: string;
+  /** Other query params to keep when switching focus, e.g. "generate=1" — without a leading "?" or "&". */
+  extraQuery?: string;
   /** Use light (current-color) trigger styling for placement on a solid accent-colored surface. */
   inverted?: boolean;
 }) {
-  const options = FOCUS_OPTIONS.map((option) => ({
-    ...option,
-    href: option.value === "due" ? basePath : `${basePath}?focus=${option.value}`,
-  }));
+  const options = FOCUS_OPTIONS.map((option) => {
+    const query = [option.value === "due" ? "" : `focus=${option.value}`, extraQuery].filter(Boolean).join("&");
+    return { ...option, href: query ? `${basePath}?${query}` : basePath };
+  });
 
   return <Dropdown label="Focus:" options={options} current={current} inverted={inverted} />;
 }

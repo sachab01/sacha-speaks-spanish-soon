@@ -13,6 +13,7 @@ import {
 } from "@/hooks/usePracticeSession";
 import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { FeedbackCard } from "./FeedbackCard";
+import { PracticeNotice } from "@/components/practice/PracticeNotice";
 
 export function SpeakingExercise({
   scope,
@@ -77,6 +78,7 @@ export function SpeakingExercise({
   return (
     <Fragment>
       <QnaOverlay qnaUrl={qnaPath(scope, "speaking")} attemptId={prompt.attemptId} />
+      {prompt.notice && <PracticeNotice text={prompt.notice} />}
       <div className="flex flex-col gap-4">
         <div>
           <p className="text-xs tracking-wide text-neutral-500 uppercase">Say this in Spanish</p>

@@ -5,8 +5,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export type PracticeMode = "writing" | "speaking" | "listening";
 export type PracticeFocus = "due" | "weakest" | "stale";
 
-/** Scopes a practice session to one topic, or to Mixed Review across all topics. */
-export type PracticeScope = { topicId: number } | { mixed: true };
+/**
+ * Scopes a practice session to one topic, or to Mixed Review across all
+ * topics — optionally with freshly generated sentences instead of the
+ * topics' stored ones.
+ */
+export type PracticeScope = { topicId: number } | { mixed: true; generate?: boolean };
 
 export function practiceBasePath(scope: PracticeScope, mode: PracticeMode) {
   return "topicId" in scope
@@ -18,7 +22,13 @@ export function qnaPath(scope: PracticeScope, mode: PracticeMode) {
   return "topicId" in scope ? `/api/topics/${scope.topicId}/qna` : `/api/practice/mixed/${mode}/qna`;
 }
 
-type Prompt = { attemptId: string; promptEnglish?: string; promptSpanish?: string };
+type Prompt = {
+  attemptId: string;
+  promptEnglish?: string;
+  promptSpanish?: string;
+  /** Set when Mixed Review couldn't generate a sentence and fell back to a stored one. */
+  notice?: string | null;
+};
 
 export type WordVerdict = {
   /** Null when this span isn't one of the tracked vocab words (ordinary grammar/glue) — still graded, just not FSRS-scheduled. */
@@ -63,7 +73,10 @@ export function usePracticeSession(
   onResult?: (result: AttemptResult) => void,
 ) {
   const basePath = practiceBasePath(scope, mode);
-  const nextUrl = focus === "due" ? `${basePath}/next` : `${basePath}/next?focus=${focus}`;
+  const nextQuery = new URLSearchParams();
+  if (focus !== "due") nextQuery.set("focus", focus);
+  if ("mixed" in scope && scope.generate) nextQuery.set("generate", "1");
+  const nextUrl = nextQuery.size > 0 ? `${basePath}/next?${nextQuery}` : `${basePath}/next`;
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,8 +87,15 @@ export function usePracticeSession(
   // calls can both resolve — only the latest one's result should ever be applied,
   // or a stale response could silently replace the prompt after the newer one.
   const requestIdRef = useRef(0);
+  // The guard above only discards a stale response — the duplicate request
+  // still reaches the server and can cost a model call. This one stops a
+  // second identical request (Strict Mode's double effect, a double click on
+  // Next) from being sent while the first is still in flight.
+  const inFlightUrlRef = useRef<string | null>(null);
 
   const fetchNext = useCallback(async () => {
+    if (inFlightUrlRef.current === nextUrl) return;
+    inFlightUrlRef.current = nextUrl;
     const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
@@ -88,6 +108,7 @@ export function usePracticeSession(
     } catch (err) {
       if (requestIdRef.current === requestId) setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
+      if (inFlightUrlRef.current === nextUrl) inFlightUrlRef.current = null;
       if (requestIdRef.current === requestId) setIsLoading(false);
     }
   }, [nextUrl]);

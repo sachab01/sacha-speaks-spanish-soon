@@ -1,7 +1,9 @@
 import { Type } from "@google/genai";
 import { z } from "zod";
 
+import { httpStatusOf, QuotaExhaustedError } from "../../errors";
 import { callStructured as callGemini } from "../client";
+import { LITE_CHAIN } from "../quota";
 import { callStructured as callMistral } from "../../mistral/client";
 
 const VERDICT_VALUES = ["correct", "acceptable", "wrong", "missing"] as const;
@@ -53,9 +55,8 @@ export type TranslationGradeResult = {
 };
 export type TranslationDirection = "en_to_es" | "es_to_en";
 
-/** Gemini's client already retries 429/503 internally; if it still throws with this status, the daily free-tier quota is exhausted rather than a transient blip. */
 function isQuotaError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "status" in error && (error as { status?: number }).status === 429;
+  return error instanceof QuotaExhaustedError || httpStatusOf(error) === 429;
 }
 
 const RESPONSE_SCHEMA = {
@@ -151,7 +152,9 @@ Learner's answer: "${userAnswer.trim() || "(blank)"}"`,
   let gradedBy: "gemini" | "mistral";
   let graderWarning: string | null;
   try {
-    raw = await callGemini(callParams);
+    // Waits a few seconds for a per-minute slot before falling back — a short
+    // pause is better than a less accurate grade, a long one isn't.
+    raw = await callGemini({ ...callParams, models: LITE_CHAIN, maxWaitMs: 8_000 });
     gradedBy = "gemini";
     graderWarning = null;
   } catch (error) {
@@ -159,7 +162,9 @@ Learner's answer: "${userAnswer.trim() || "(blank)"}"`,
     raw = await callMistral(callParams);
     gradedBy = "mistral";
     graderWarning = isQuotaError(error)
-      ? "Gemini's free daily quota is used up — this was graded with a backup model, which may be less accurate."
+      ? error instanceof QuotaExhaustedError && error.kind === "minute"
+        ? "Gemini's per-minute limit was reached — this was graded with a backup model, which may be less accurate."
+        : "Gemini's free daily quota is used up — this was graded with a backup model, which may be less accurate."
       : "Gemini was temporarily unavailable — this was graded with a backup model, which may be less accurate.";
   }
 
