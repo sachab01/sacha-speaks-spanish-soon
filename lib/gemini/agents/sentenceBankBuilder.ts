@@ -54,7 +54,7 @@ const RESPONSE_SCHEMA = {
   required: ["sentences"],
 };
 
-const SYSTEM_INSTRUCTION = `You are building a practice sentence bank for a beginner-to-intermediate learner of MEXICAN Spanish, for one topic at a time. The learner practices only with these sentences, and their vocabulary for the topic is extracted from them — so the sentences decide what they learn.
+const SYSTEM_INSTRUCTION = `You are building a practice sentence bank for an intermediate learner of MEXICAN Spanish, for one topic at a time. The learner practices only with these sentences, and their vocabulary for the topic is extracted from them — so the sentences decide what they learn.
 
 The most important rule: every sentence must be something native speakers in Mexico actually say in this situation. Natural, everyday, idiomatic — the phrases you'd really hear, not stilted textbook constructions. Use common, high-frequency words; never rare, overly formal, or unusual words, and never force words together that don't belong together. Before answering, reread each sentence and ask whether a Mexican speaker would really say it like that — if not, rewrite it.
 
@@ -64,6 +64,7 @@ Sentence rules:
 - Short: 3-12 words. Mix questions, answers, requests, short replies and statements — like real conversation.
 - Grammatically correct: agreement, conjugation, accents, and Spanish punctuation (¿…? ¡…!).
 - No two sentences the same or near-identical.
+- Diverse sentences.
 - The topic's vocabulary should be roughly 25-40 useful words and fixed expressions. Reuse each of them across several sentences in different contexts — every word you list for a sentence should appear in at least 3 different sentences in the bank, so the learner meets it in varied contexts instead of memorizing one sentence.
 
 For each sentence, "words" lists every word or fixed expression in it that the learner needs to know — verbs, nouns, adjectives, adverbs (muy, mucho, también…), question words (cómo, dónde, qué…), pronouns, prepositions, and fixed expressions. Skip only articles (el, la, los, las, un, una) and proper names (people, cities, neighborhoods, brands) — a sentence may mention a place, but it isn't vocabulary. Each entry:
@@ -146,6 +147,8 @@ Check every sentence:
 3. Is it in the present tense (commands and "voy a + infinitive" are fine)?
 4. Is the English translation accurate and natural?
 If a sentence fails any check, rewrite it into a correct, natural sentence on the same topic that uses the same words where possible — or drop it if it can't be saved. Keep sentences that pass exactly as they are.
+
+In case you want to use iformation about the student: Her name is Sacha, she is from amsterdam, and is 25 years old.
 
 Then check each sentence's "words" list against the final sentence text. It must contain every word or fixed expression the learner needs to know from that sentence — including adverbs (muy, mucho, también…), question words (cómo, dónde, qué…), pronouns and prepositions — in dictionary form (infinitive for verbs, singular for nouns, masculine singular for adjectives), with fixed expressions kept as one entry. Add anything missing, remove entries that no longer appear in the sentence, and remove articles and proper names (people, cities, neighborhoods, brands) entirely. Where an entry is already in the learner's existing vocabulary list, keep exactly that spelling.
 
